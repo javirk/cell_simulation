@@ -1,0 +1,1 @@
+pub type Particle = u8;
