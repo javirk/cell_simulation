@@ -2,15 +2,16 @@ use std::{borrow::Cow, mem};
 use wgpu::util::DeviceExt;
 use rand::Rng;
 
-use crate::rdme::RDME;
+use crate::{rdme::RDME, lattice_params::LatticeParams};
 
 const WORKGROUP_SIZE: (u32, u32) = (8, 8);
 
 pub struct Simulation {
     // Data for the compute shader.
-    compute_pipeline: wgpu::ComputePipeline,  // Maybe RDME and CME here
+    rdme: RDME,
     bind_groups: Vec<wgpu::BindGroup>,
     bind_group_layout: wgpu::BindGroupLayout,
+    lattice_params: LatticeParams,
     frame_num: usize,
 }
 
@@ -83,6 +84,14 @@ impl Simulation {
         }
 
         let rdme = RDME::new(&bind_group_layout, &device);
+
+        Simulation {
+            rdme,
+            bind_groups,
+            bind_group_layout,
+            lattice_params: *lattice_params.clone(),  // This is a problem probably
+            frame_num: 0
+        }
         
     }
 
@@ -90,22 +99,12 @@ impl Simulation {
         &mut self,
         command_encoder: &mut wgpu::CommandEncoder,
     ) {
-        // command encoder as input
-        // Compute pass
-        // Set pipeline, bind group
-        // Dispatch
 
-        // let xdim = params[1] as u32 + WORKGROUP_SIZE.0 - 1;
-        // let xgroups = xdim / WORKGROUP_SIZE.0;
-        // let ydim = params[0] as u32 + WORKGROUP_SIZE.1 - 1;
-        // let ygroups = ydim / WORKGROUP_SIZE.1;
+        self.rdme.step(&self.bind_groups[self.frame_num % 2], command_encoder, &self.lattice_params);
 
-        // let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        // cpass.set_pipeline(&self.compute_pipeline);
-        // cpass.set_bind_group(0, &self.bind_groups[self.frame_num % 2], &[]);
-        // cpass.dispatch_workgroups(xgroups, ygroups, 3);
+        // cme step
 
-        // self.frame_num += 1;
+        self.frame_num += 1;
 
     }
 }

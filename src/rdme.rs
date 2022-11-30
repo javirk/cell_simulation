@@ -5,10 +5,9 @@ use rand::Rng;
 use crate::{lattice::Lattice, lattice_params::LatticeParams};
 
 
-const WORKGROUP_SIZE: (u32, u32) = (8, 8);
+const WORKGROUP_SIZE: (u32, u32, u32) = (4, 4, 4);
 
 pub struct RDME {
-    // Data for the compute shader.
     compute_pipeline: wgpu::ComputePipeline,
 }
 
@@ -46,24 +45,24 @@ impl RDME {
 
     pub fn step(
         &mut self,
+        bind_groups: &wgpu::BindGroup,
         command_encoder: &mut wgpu::CommandEncoder,
-        params: &Vec<usize>,
+        params: &LatticeParams,
     ) {
         // command encoder as input
         // Compute pass
         // Set pipeline, bind group
         // Dispatch
-        let xdim = params[1] as u32 + WORKGROUP_SIZE.0 - 1;
+        let xdim = params.lattice_params.x_res as u32 + WORKGROUP_SIZE.0 - 1;
         let xgroups = xdim / WORKGROUP_SIZE.0;
-        let ydim = params[0] as u32 + WORKGROUP_SIZE.1 - 1;
+        let ydim = params.lattice_params.y_res as u32 + WORKGROUP_SIZE.1 - 1;
         let ygroups = ydim / WORKGROUP_SIZE.1;
+        let zdim = params.lattice_params.z_res as u32 + WORKGROUP_SIZE.1 - 1;
+        let zgroups = zdim / WORKGROUP_SIZE.1;
 
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
         cpass.set_pipeline(&self.compute_pipeline);
-        cpass.set_bind_group(0, &self.bind_groups[self.frame_num % 2], &[]);
-        cpass.dispatch_workgroups(xgroups, ygroups, 3);
-
-        self.frame_num += 1;
-
+        cpass.set_bind_group(0, bind_groups, &[]);
+        cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
     }
 }

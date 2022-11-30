@@ -1,6 +1,4 @@
-use wgpu::TextureDimension;
 use wgpu::util::DeviceExt;
-use bytemuck::{Pod, Zeroable};
 use std::mem;
 use rand::Rng;
 
@@ -8,7 +6,6 @@ use crate::MAX_PARTICLES_SITE;
 use crate::lattice_params::Params;
 use crate::types::Particle;
 
-// ---------------------------------------------------------------------------
 
 pub struct Lattice {
     pub lattice_buff: wgpu::Buffer,
@@ -65,15 +62,6 @@ impl Lattice {
         for (particle, x, y, z) in continuous_lattice {
             self.add_particle_site(&lattice, x, y, z, particle)
         }
-
-        // let lattice_buff = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //     label: Some("Lattice Buffer"),
-        //     contents: bytemuck::cast_slice(&lattice),
-        //     usage: wgpu::BufferUsages::VERTEX  // What is vertex?
-        //         | wgpu::BufferUsages::STORAGE
-        //         | wgpu::BufferUsages::COPY_DST,
-        // });
-        // self.lattice_buff = lattice_buff;
         lattice
 
     }
