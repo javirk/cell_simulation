@@ -269,7 +269,7 @@ fn start<F: Framework>(
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                    program.render(&view, &device, &queue, &spawner);
+                program.render(&view, &device, &queue, &spawner);
 
                 frame.present();
             }

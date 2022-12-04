@@ -1,9 +1,12 @@
 use lattice::Lattice;
 use lattice_params::{Params, LatticeParams};
+use simulation::Simulation;
 use types::Particle;
 use wgpu::util::DeviceExt;
 
-const MAX_PARTICLES_SITE: usize = 16;
+use crate::{render_params::RenderParams, render::Renderer, texture::Texture};
+
+const MAX_PARTICLES_SITE: usize = 15;
 
 mod simulation;
 mod framework;
@@ -11,17 +14,16 @@ mod lattice;
 mod lattice_params;
 mod types;
 mod rdme;
-
-use crate::{
-    simulation::Cell,
-};
-
+mod render;
+mod texture;
+mod render_params;
+mod preprocessor;
 
 
 
 struct CellSimulation {
-    cell: Cell,  // It's actually not a cell, but a simulation
-    //renderer: Renderer,
+    simulation: Simulation,
+    renderer: Renderer,
 }
 
 impl framework::Framework for CellSimulation {
@@ -58,23 +60,35 @@ impl framework::Framework for CellSimulation {
         // Create texture
         // Init life, setting the initial state
         // Init renderer
-        let particles = vec![3, 4, 78, 1];
+        let particles = vec![0, 1, 1, 1];
+        
+        let render_param_data: Vec<usize> = vec![
+            768, // height
+            1024, // width
+        ];
+        let texture = Texture::new(&device, &render_param_data, wgpu::TextureFormat::R32Float);
 
-        let params = LatticeParams::new(vec![1., 1., 1.,], vec![32, 32, 32], device);
+        let render_params = RenderParams::new(device, &render_param_data);
+        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![3, 1, 1], device);
 
         let mut lattices = Vec::<Lattice>::new();
         for i in 0..2 {
-            lattices.push(Lattice::new(&params.lattice_params, device))
+            lattices.push(Lattice::new(&simulation_params.lattice_params, device))
         }
 
-        let lattice_data: Vec<Particle> = lattices[0].init_random_particles(&particles);
+        lattices[0].init_random_particles(&particles);
+        println!("{}", lattices[0]);
+        let lattice_data = lattices[0].lattice.clone();
 
-        queue.write_buffer(&lattices[0].lattice_buff, 0, &lattice_data);
-        queue.write_buffer(&lattices[1].lattice_buff, 0, &lattice_data);
+        lattices[0].rewrite_buffer(queue);
+        lattices[1].rewrite_buffer_data(queue, &lattice_data);
 
+        let simulation = Simulation::new(&lattices, &simulation_params, device);
+        let renderer = Renderer::new(&texture, &render_params, config, device);
 
         CellSimulation {
-            cell: simulation,
+            simulation,
+            renderer
         }
     }
 
@@ -92,7 +106,8 @@ impl framework::Framework for CellSimulation {
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        self.cell.step(&mut command_encoder);
+        self.simulation.step(&mut command_encoder);
+        self.renderer.render(&mut command_encoder, &view);
 
         queue.submit(Some(command_encoder.finish()));
     }

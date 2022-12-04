@@ -2,7 +2,7 @@ use std::{borrow::Cow, mem};
 use wgpu::util::DeviceExt;
 use rand::Rng;
 
-use crate::{rdme::RDME, lattice_params::LatticeParams};
+use crate::{rdme::RDME, lattice_params::{LatticeParams, Params}, lattice::Lattice};
 
 const WORKGROUP_SIZE: (u32, u32) = (8, 8);
 
@@ -11,7 +11,7 @@ pub struct Simulation {
     rdme: RDME,
     bind_groups: Vec<wgpu::BindGroup>,
     bind_group_layout: wgpu::BindGroupLayout,
-    lattice_params: LatticeParams,
+    lattice_params: Params,
     frame_num: usize,
 }
 
@@ -89,7 +89,7 @@ impl Simulation {
             rdme,
             bind_groups,
             bind_group_layout,
-            lattice_params: *lattice_params.clone(),  // This is a problem probably
+            lattice_params: lattice_params.lattice_params,  // This is a problem probably
             frame_num: 0
         }
         
@@ -99,6 +99,10 @@ impl Simulation {
         &mut self,
         command_encoder: &mut wgpu::CommandEncoder,
     ) {
+
+        if self.frame_num % 10 == 0 {
+            println!("{}", self.frame_num);
+        }
 
         self.rdme.step(&self.bind_groups[self.frame_num % 2], command_encoder, &self.lattice_params);
 
