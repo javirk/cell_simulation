@@ -10,6 +10,11 @@ struct LatticeParams {
     height : u32,
 };
 
+struct Uniforms {
+    frame_num: u32,
+    itime: u32
+}
+
 @vertex
 fn vs_main(
     @location(0) position: vec4<f32>,
@@ -22,11 +27,13 @@ fn vs_main(
 }
 
 @group(0) @binding(0) var texture: texture_storage_2d<r32float, read>;
-@group(0) @binding(1) var<uniform> params : LatticeParams;
+@group(0) @binding(1) var<uniform> params: LatticeParams;
+@group(0) @binding(2) var<uniform> unif: Uniforms;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let state: u32 = Hash_Wang(params.width);
+    //let state: u32 = Hash_Wang(u32((in.position[0]) * f32(unif.itime)));
+    let state: u32 = Hash_Wang(unif.itime);
     let color: f32 = UniformFloat(state);
-    return vec4<f32>(color, 0.0f, 0.0f, 1.0f);
+    return vec4<f32>(color, color, color, 1.0f);
 }

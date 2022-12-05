@@ -1,11 +1,10 @@
 /// Taken from https://github.com/elyshaffir/wgsl_preprocessor and modified slightly.
 
-use std::{borrow, collections::HashMap, path};
+use std::{borrow, collections::HashMap};
 use std::path::PathBuf;
 use ex;
 
-const INSTRUCTION_PREFIX: &str = "//!";
-const INCLUDE_INSTRUCTION: &str = const_format::concatcp!(INSTRUCTION_PREFIX, "include");
+const INCLUDE_INSTRUCTION: &str = "//!include";
 
 pub struct ShaderBuilder {
 	/// String with the current WGSL source.

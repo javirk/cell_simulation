@@ -9,6 +9,10 @@ struct LatticeParams {
     z_res: u32
 };
 
+struct Uniforms {
+    frame_num: u32,
+}
+
 struct Lattice {
     lattice: array<atomic<u32>>,
 };

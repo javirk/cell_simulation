@@ -17,7 +17,7 @@ fn Hash_Wang(_key: u32) -> u32 {
 //-------------------------------------------------------------------------
 
 fn UniformUintToFloat(u: u32) -> f32 {
-    return f32(u) * f32(0x2F800000u);
+    return f32(u) * bitcast<f32>(0x2F800000u);
 }
 
 

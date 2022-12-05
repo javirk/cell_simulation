@@ -2,7 +2,12 @@ use bytemuck::{Pod, Zeroable};
 use std::{borrow::Cow, mem};
 use wgpu::util::DeviceExt;
 
-use crate::{texture::Texture, render_params::RenderParams, preprocessor::ShaderBuilder};
+use crate::{
+    texture::Texture, 
+    render_params::RenderParams, 
+    preprocessor::ShaderBuilder,
+    uniforms::UniformBuffer
+};
 
 pub struct Renderer {
     vertex_buf: wgpu::Buffer,
@@ -43,22 +48,20 @@ impl Renderer {
     }
 
     pub fn new(
+        uniform_buffer: &UniformBuffer,
         texture: &Texture,
         render_params: &RenderParams,
         config: &wgpu::SurfaceConfiguration,
         device: &wgpu::Device,
     ) -> Self {
+
+        //let uniform_buffer = UniformBuffer::new(uniform.clone(), device);
+
         // Load and compile the shaders.
         let binding = ShaderBuilder::new("render.wgsl").unwrap();
         let shader_builder = binding.build();
 
         let shader = device.create_shader_module(shader_builder);
-
-
-        // let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        //     label: None,
-        //     source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/render.wgsl"))),
-        // });
 
         // Create the vertex and index buffers.
         let vertex_size = mem::size_of::<Vertex>();
@@ -74,8 +77,9 @@ impl Renderer {
             usage: wgpu::BufferUsages::INDEX,
         });
 
+
         // Bind the texture and params using a bind group.
-        let texture_bind_group_layout =
+        let bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
@@ -90,13 +94,19 @@ impl Renderer {
                         ty: render_params.binding_type(),
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: uniform_buffer.binding_type(),
+                        count: None,
+                    },
                 ],
                 label: Some("texture_bind_group_layout"),
             });
-
-        let texture_bind_group = device.create_bind_group(
+        // TODO: Add many groups. Frame shouldn't be with texture.
+        let bind_group = device.create_bind_group(
             &wgpu::BindGroupDescriptor {
-                layout: &texture_bind_group_layout,
+                layout: &bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -106,10 +116,15 @@ impl Renderer {
                         binding: 1,
                         resource: render_params.binding_resource(),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: uniform_buffer.binding_resource(),
+                    },
                 ],
-                label: Some("texture_bind_group"),
+                label: Some("render_bind_group"),
             }
         );
+
 
         // Create the render pipeline.
         let vertex_buffers = [wgpu::VertexBufferLayout {
@@ -133,7 +148,7 @@ impl Renderer {
          
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&texture_bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -166,9 +181,9 @@ impl Renderer {
         Renderer {
             vertex_buf: vertex_buf,
             index_buf: index_buf,
-            index_count:  index_data.len(),
+            index_count: index_data.len(),
             pipeline: pipeline,
-            bind_group: texture_bind_group
+            bind_group: bind_group,
         }
     }
 
