@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use std::{borrow::Cow, mem};
+use std::{mem};
 use wgpu::util::DeviceExt;
 
 use crate::{

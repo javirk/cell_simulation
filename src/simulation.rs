@@ -1,4 +1,3 @@
-use wgpu::util::DeviceExt;
 
 use crate::{
     rdme::RDME, 

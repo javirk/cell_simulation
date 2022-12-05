@@ -1,6 +1,4 @@
-use std::{borrow::Cow, mem};
-
-use crate::{lattice_params::{LatticeParams, Params},preprocessor::ShaderBuilder};
+use crate::{lattice_params::Params,preprocessor::ShaderBuilder};
 
 
 const WORKGROUP_SIZE: (u32, u32, u32) = (4, 4, 4);

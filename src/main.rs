@@ -1,10 +1,8 @@
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use lattice::Lattice;
-use lattice_params::{Params, LatticeParams};
+use lattice_params::LatticeParams;
 use simulation::Simulation;
-use types::Particle;
-use wgpu::util::DeviceExt;
 
 use crate::{render_params::RenderParams, render::Renderer, texture::Texture, uniforms::{Uniform, UniformBuffer}};
 
