@@ -32,8 +32,7 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    //let state: u32 = Hash_Wang(u32((in.position[0]) * f32(unif.itime)));
-    let state: u32 = Hash_Wang(unif.itime);
-    let color: f32 = UniformFloat(state);
-    return vec4<f32>(color, color, color, 1.0f);
+    // let state: u32 = Hash_Wang(unif.itime);
+    // let color: f32 = UniformFloat(state);
+    return vec4<f32>(1.0f, 1.0f, 1.0f, 1.0f);
 }
