@@ -40,20 +40,20 @@ fn get_index_lattice(id_volume: vec3<u32>) -> u32 {
     return (id_volume.x + id_volume.y * params.x_res + id_volume.z * params.x_res * params.y_res) * (params.max_particles_site + 1);
 }
 
-fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u32>) {
-    var occ_dest: u32;
-    var idx_dest: u32;
-    idx_dest = get_index_lattice(volume_dest);
-    occ_dest = occupancy_dest(idx_dest);
+fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u32>, idx_particle: u32) {
+    let idx_dest: u32 = get_index_lattice(volume_dest);
+    let occ_dest: u32 = occupancy_dest(idx_dest);
     if (occ_dest >= params.max_particles_site) { break; }
     // Add particle
     atomicExchange(latticeDest[idx_dest + occ_dest], particle);
     atomicAdd(latticeDest[idx_dest + params.max_particles_site], 1);
     
     // Remove particle: I need the index of the particle in the source volume
-    idx_src = get_index_lattice(volume_src);
-    occ_src = occupancy_src(idx_src);
-    atomicExchange(latticeSrc[idx_])
+    let idx_lattice_src: u32 = get_index_lattice(volume_src);
+    let occ_src: u32 = occupancy_src(idx_lattice_src);
+    let val: u32 = atomicExchange(latticeDest[idx_lattice_src + occ_src - 1], 0);
+    atomicExchange(latticeDest[idx_particle], val);
+    atomicAdd(latticeDest[idx_lattice_src + params.max_particles_site], -1);
 }
 
 
@@ -65,25 +65,15 @@ fn move_particle(particle: u32, i_movement: u8, id_volume: vec3<u32>, initial_in
             // - x
             if (id_volume.x == 0) { break; }
             volume_dest.x -= 1;
-            idx_dest = get_index_lattice(volume_dest);
-            occ_dest = occupancy_dest(idx_dest);
-            if (occ_dest >= max_particles_site) { break; }
-            // Add particle
-            atomicExchange(latticeDest[idx_dest + occ_dest], particle);
-            atomicAdd(latticeDest[idx_dest + params.max_particles_site], 1);
         }
         case 1: {
             // + x
             if (id_volume.x == params.W) { break; }
             volume_dest.x += 1;
-            idx_dest = get_index_lattice(volume_dest);
-            occ_dest = occupancy_dest(idx_dest);
-            if (occ_dest >= max_particles_site) { break; }
-            atomicExchange(latticeDest[idx_dest + occ_dest], particle);
-            atomicAdd(latticeDest[idx_dest + params.max_particles_site], 1);
         }
 
     }
+    move_particle_site(particle, id_volume, volume_dest, initial_index);
 }
 
 
