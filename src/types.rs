@@ -1,1 +1,1 @@
-pub type Particle = u8;
+pub type Particle = u32;

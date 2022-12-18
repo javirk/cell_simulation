@@ -133,14 +133,14 @@ impl Renderer {
             attributes: &[
                 wgpu::VertexAttribute {
                     // Pos
-                    format: wgpu::VertexFormat::Float32x4,
+                    format: wgpu::VertexFormat::Float32x3,
                     offset: 0,
                     shader_location: 0,
                 },
                 wgpu::VertexAttribute {
                     // Texture
                     format: wgpu::VertexFormat::Float32x2,
-                    offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
                 },
             ],
@@ -207,7 +207,7 @@ impl Renderer {
             color_attachments: &color_attachments,
             depth_stencil_attachment: None,
         });
-        rpass.push_debug_group("Prepare data for draw.");
+        rpass.push_debug_group("Prepare data for drawing.");
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);

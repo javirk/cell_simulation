@@ -1,7 +1,7 @@
 use crate::{lattice_params::Params,preprocessor::ShaderBuilder};
 
 
-const WORKGROUP_SIZE: (u32, u32, u32) = (4, 4, 4);
+const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);
 
 pub struct RDME {
     compute_pipeline: wgpu::ComputePipeline,
@@ -9,7 +9,8 @@ pub struct RDME {
 
 impl RDME {
     pub fn new( // Receive bind groups, build compute pipeline. Simulation is responsible for everything else
-        bind_group_layout: &wgpu::BindGroupLayout,
+        data_group_layout: &wgpu::BindGroupLayout,
+        lattice_group_layout: &wgpu::BindGroupLayout,
         device: &wgpu::Device,
     ) -> Self {
         let binding = ShaderBuilder::new("rdme.wgsl").unwrap();
@@ -19,7 +20,7 @@ impl RDME {
         let compute_pipeline_layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("RDME compute"),
-                bind_group_layouts: &[bind_group_layout],
+                bind_group_layouts: &[data_group_layout, lattice_group_layout],
                 push_constant_ranges: &[],
             }
         );
@@ -40,7 +41,8 @@ impl RDME {
 
     pub fn step(
         &mut self,
-        bind_groups: &wgpu::BindGroup,
+        data_bind_group: &wgpu::BindGroup,
+        simulation_bind_group: &wgpu::BindGroup,
         command_encoder: &mut wgpu::CommandEncoder,
         params: &Params,
     ) {
@@ -57,7 +59,8 @@ impl RDME {
 
         let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
         cpass.set_pipeline(&self.compute_pipeline);
-        cpass.set_bind_group(0, bind_groups, &[]);
+        cpass.set_bind_group(0, data_bind_group, &[]);
+        cpass.set_bind_group(1, simulation_bind_group, &[]);
         cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
     }
 }

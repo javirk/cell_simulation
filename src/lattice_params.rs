@@ -17,7 +17,10 @@ pub struct Params {
     pub x_res : u32,
     pub y_res: u32,
     pub z_res: u32,
-    max_particles_site: usize
+    max_particles_site: u32,
+    lambda: f32,
+    D: f32,
+    tau: f32
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +42,10 @@ impl LatticeParams {
             x_res: resolution[0] as u32,
             y_res: resolution[1] as u32,
             z_res: resolution[2] as u32,
-            max_particles_site: MAX_PARTICLES_SITE
+            max_particles_site: MAX_PARTICLES_SITE as u32,
+            lambda: 1.,
+            D: 1.,
+            tau: 0.1
         };
 
         let param_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

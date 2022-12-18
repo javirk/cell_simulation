@@ -1,12 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
-
+use std::env;
 use lattice::Lattice;
 use lattice_params::LatticeParams;
 use simulation::Simulation;
 
 use crate::{render_params::RenderParams, render::Renderer, texture::Texture, uniforms::{Uniform, UniformBuffer}};
 
-const MAX_PARTICLES_SITE: usize = 15;
+const MAX_PARTICLES_SITE: usize = 8;
 
 mod simulation;
 mod framework;
@@ -68,16 +68,16 @@ impl framework::Framework for CellSimulation {
         };
         let uniform_buffer = UniformBuffer::new(uniform, device);
         
-        let particles = vec![0, 1, 1, 1];
+        let particles = vec![0, 1];
         
         let render_param_data: Vec<usize> = vec![
             768, // height
             1024, // width
         ];
-        let texture = Texture::new(&device, &render_param_data, wgpu::TextureFormat::R32Float);
+        let texture = Texture::new(&device, &render_param_data);
 
         let render_params = RenderParams::new(device, &render_param_data);
-        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![3, 1, 1], device);
+        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![2, 1, 1], device);
 
         let mut lattices = Vec::<Lattice>::new();
         for i in 0..2 {
@@ -86,12 +86,14 @@ impl framework::Framework for CellSimulation {
 
         lattices[0].init_random_particles(&particles);
         println!("{}", lattices[0]);
+        println!("{:?}", lattices[0].occupancy);
         let lattice_data = lattices[0].lattice.clone();
+        let occupancy_data = lattices[0].occupancy.clone();
 
-        lattices[0].rewrite_buffer(queue);
-        lattices[1].rewrite_buffer_data(queue, &lattice_data);
+        lattices[0].rewrite_buffers(queue);
+        lattices[1].rewrite_buffer_data(queue, &lattice_data, &occupancy_data);
 
-        let simulation = Simulation::new(&uniform_buffer, &lattices, &simulation_params, device);
+        let simulation = Simulation::new(&uniform_buffer, &lattices, &simulation_params, &texture, device);
         let renderer = Renderer::new(&uniform_buffer, &texture, &render_params, config, device);
 
         CellSimulation {
@@ -131,5 +133,6 @@ impl framework::Framework for CellSimulation {
 
 /// run example
 fn main() {
+    //env::set_var("RUST_BACKTRACE", "1");
     framework::run::<CellSimulation>("Cell Simulation");
 }

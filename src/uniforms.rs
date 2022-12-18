@@ -40,10 +40,3 @@ impl UniformBuffer {
         }
     }
 }
-
-// implement a method for Uniform that converts its elements into a vector
-impl Uniform {
-    pub fn to_vec(&self) -> [u32; 2] {
-        [self.itime as u32, self.frame_num as u32]
-    }
-}

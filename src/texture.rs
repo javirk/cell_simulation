@@ -6,11 +6,13 @@ pub struct Texture {
 }
 
 impl Texture {
+    // This is important: https://www.w3.org/TR/WGSL/#storage-texel-formats
     pub fn new(
         device: &wgpu::Device,
         params: &Vec<usize>,
-        format: wgpu::TextureFormat,
     ) -> Self {
+        // TODO: I don't know if this is a good format. Leave it for now.
+        let format = wgpu::TextureFormat::Rgba32Float;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
