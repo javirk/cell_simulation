@@ -36,7 +36,7 @@ struct Locks {
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<u32>;
-@group(1) @binding(4) var texture: texture_storage_2d<rgba32float, read_write>;
+@group(1) @binding(4) var texture: texture_storage_2d<r32float, read_write>;
 
 
 fn lock(location: i32) -> bool {
@@ -66,8 +66,7 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
     // idx particle: index of the particle in the source lattice
     
     let idx_occupancy_src: i32 = get_index_occupancy(volume_src);
-    let idx_occupancy_dest: i32 = get_index_occupancy(volume_dest);
-
+    var idx_occupancy_dest: i32 = get_index_occupancy(volume_dest);
    
     // First, move particle away. Lock the destination cube for that
     while (lock(idx_occupancy_dest)) {
@@ -81,12 +80,14 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
 
         latticeDest.lattice[idx_destination] = particle;
         occupancyDest[idx_occupancy_dest] += 1u;
+
+        latticeDest.lattice[idx_particle] = 0u;
+        occupancyDest[idx_occupancy_src] -= 1u;
     }
     unlock(idx_occupancy_dest);
 
     // Second, remove particle from source lattice (convert to 0)
     while(lock(idx_occupancy_src)) {
-        //let idx_source: i32 = get_index_lattice(volume_src) + i32(occupancyDest[idx_occupancy_src]);
         latticeDest.lattice[idx_particle] = 0u;
         occupancyDest[idx_occupancy_src] -= 1u;
     }
@@ -105,27 +106,22 @@ fn move_particle(particle: u32, i_movement: i32, id_volume: vec3<u32>, initial_i
         }
         case 1: {
             // + x
-            
-            if (id_volume.x == (params.x_res - 1u)) { 
-                //textureStore(texture, vec2<i32>(0,0), vec4<f32>(0.0, 0.0, 1.0, 1.0));
-                return 0.; 
-            }
-            //textureStore(texture, vec2<i32>(0,0), vec4<f32>(1.0, 0.0, 1.0, 1.0));
+            if (id_volume.x == (params.x_res - 1u)) { return 0.; }
             volume_dest.x += 1u;
         }
         default: {
 
         }
     }
-    //textureStore(texture, vec2<i32>(0,0), vec4<f32>(f32(unif.frame_num) / 256., 0.0, 0.0, 1.0));
     move_particle_site(particle, id_volume, volume_dest, initial_index);
     return 1.;
 }
 
 
 
-@compute @workgroup_size(1, 1, 1)
+@compute @workgroup_size(2, 1, 1)
 fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    textureStore(texture, vec2<i32>(0,0), vec4<f32>(0., 0.0, 0.0, 1.0));
     let X: u32 = global_id.x;
     let Y: u32 = global_id.y;
     let Z: u32 = global_id.z;
@@ -135,8 +131,8 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let particles_site: u32 = params.max_particles_site;
     let p: f32 = params.D * params.tau / (params.lambda * params.lambda);
 
-    let idx_lattice = (X + Y * W + Z * H * W) * particles_site;
-    let idx_occupancy = X + Y * W + Z * H * W;
+    let idx_lattice = get_index_lattice(global_id);
+    let idx_occupancy = get_index_occupancy(global_id);
 
     let occupancy: u32 = occupancySrc[idx_occupancy];
     var state: u32;
@@ -149,18 +145,8 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         while ((rand_number < p * f32(i + 1)) && (i < 7)) {
             i += 1;
         }
-        i = 1;
                         
         let val = move_particle(latticeSrc.lattice[i_part], i, global_id, idx_lattice);
         textureStore(texture, vec2<i32>(0,0), vec4<f32>(val, 0.0, 0.0, 1.0));
     }
-
-    // iter latticeSrc particles
-    // Compute probability to stay or move
-    // Where to copy? Not trivial -> First 0 and another compute pass to sort?
-
-    // var key: u32 = H * X + Y;  // For example
-    // var state: u32 = Hash_Wang(key);
-    // var random_float: f32 = UniformFloat(state);
-
 }

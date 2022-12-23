@@ -1,7 +1,7 @@
 use crate::{lattice_params::Params,preprocessor::ShaderBuilder};
 
 
-const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);
+const WORKGROUP_SIZE: (u32, u32, u32) = (2, 1, 1);
 
 pub struct RDME {
     compute_pipeline: wgpu::ComputePipeline,
@@ -56,11 +56,14 @@ impl RDME {
         let ygroups = ydim / WORKGROUP_SIZE.1;
         let zdim = params.z_res as u32 + WORKGROUP_SIZE.1 - 1;
         let zgroups = zdim / WORKGROUP_SIZE.1;
+        
+        {
+            let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.compute_pipeline);
+            cpass.set_bind_group(0, data_bind_group, &[]);
+            cpass.set_bind_group(1, simulation_bind_group, &[]);
+            cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
+        }
 
-        let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        cpass.set_pipeline(&self.compute_pipeline);
-        cpass.set_bind_group(0, data_bind_group, &[]);
-        cpass.set_bind_group(1, simulation_bind_group, &[]);
-        cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
     }
 }

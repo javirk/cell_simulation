@@ -24,6 +24,7 @@ mod uniforms;
 
 struct CellSimulation {
     simulation: Simulation,
+    lattices: Vec<Lattice>,
     renderer: Renderer,
     uniform_buffer: UniformBuffer,
 }
@@ -98,6 +99,7 @@ impl framework::Framework for CellSimulation {
 
         CellSimulation {
             simulation,
+            lattices,
             renderer,
             uniform_buffer: uniform_buffer
         }
@@ -114,16 +116,36 @@ impl framework::Framework for CellSimulation {
         // Run life step
         // Run render step
         // Submit queue
+        let frame_num = self.uniform_buffer.data.frame_num;
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         self.simulation.step(self.uniform_buffer.data.frame_num, &mut command_encoder);
         self.renderer.render(&mut command_encoder, &view);
+        
+        // Copy source to destination (lattice and occupancy)
+        // This drops performance by 2x, but I don't know any other way to do it
+        command_encoder.copy_buffer_to_buffer(
+            &self.lattices[frame_num as usize % 2].lattice_buff, 
+            0, 
+            &self.lattices[(frame_num as usize + 1) % 2].lattice_buff, 
+            0,
+            self.lattices[frame_num as usize % 2].lattice_buff_size as u64
+        );
+
+        command_encoder.copy_buffer_to_buffer(
+            &self.lattices[frame_num as usize % 2].occupancy_buff, 
+            0, 
+            &self.lattices[(frame_num as usize + 1) % 2].occupancy_buff, 
+            0,
+            self.lattices[frame_num as usize % 2].occupancy_buff_size as u64
+        );
 
         queue.submit(Some(command_encoder.finish()));
         self.uniform_buffer.data.frame_num += 1;
         self.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32;
 
         queue.write_buffer(&self.uniform_buffer.buffer, 0, bytemuck::cast_slice(&[self.uniform_buffer.data]));
+
 
         // self.simulation.update_frame_num(self.frame_num, queue);
         // self.renderer.update_uniforms(&self.uniforms, queue);

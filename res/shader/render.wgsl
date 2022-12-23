@@ -26,7 +26,7 @@ fn vs_main(
     return out;
 }
 
-@group(0) @binding(0) var texture: texture_storage_2d<rgba32float, read>;
+@group(0) @binding(0) var texture: texture_storage_2d<r32float, read>;
 @group(0) @binding(1) var<uniform> params: LatticeParams;
 @group(0) @binding(2) var<uniform> unif: Uniforms;
 

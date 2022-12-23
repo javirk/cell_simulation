@@ -102,6 +102,8 @@ async fn setup<F: Framework>(title: &str) -> Setup {
         println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
     }
 
+    println!("Texture format: {:?}", wgpu::Adapter::get_texture_format_features(&adapter, wgpu::TextureFormat::R32Float));
+
     let optional_features = F::optional_features();
     let required_features = F::required_features();
     let adapter_features = adapter.features();

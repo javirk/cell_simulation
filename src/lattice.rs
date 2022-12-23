@@ -36,6 +36,7 @@ impl Lattice {
             label: Some("Lattice Buffer"),
             contents: bytemuck::cast_slice(&lattice),
             usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -43,6 +44,7 @@ impl Lattice {
             label: Some("Occupancy Buffer"),
             contents: bytemuck::cast_slice(&occupancy),
             usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -71,7 +73,7 @@ impl Lattice {
             for particle in 0..num_particles[specie as usize] {
                 let mut arr = [0f32; 3];
                 rng.fill(&mut arr[..]);
-                let arr = [0.9; 3];
+                let arr = [0.1; 3];
 
                 continuous_lattice.push((specie, arr[0], arr[1], arr[2]))
             }

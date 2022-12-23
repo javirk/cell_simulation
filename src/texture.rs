@@ -12,7 +12,7 @@ impl Texture {
         params: &Vec<usize>,
     ) -> Self {
         // TODO: I don't know if this is a good format. Leave it for now.
-        let format = wgpu::TextureFormat::Rgba32Float;
+        let format = wgpu::TextureFormat::R32Float;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
