@@ -1,12 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::env;
-use lattice::Lattice;
 use lattice_params::LatticeParams;
 use simulation::Simulation;
 
-use crate::{render_params::RenderParams, render::Renderer, texture::Texture, uniforms::{Uniform, UniformBuffer}};
-
 const MAX_PARTICLES_SITE: usize = 8;
+const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);
 
 mod simulation;
 mod framework;
@@ -20,11 +17,16 @@ mod render_params;
 mod preprocessor;
 mod uniforms;
 
+use crate::{
+    render_params::RenderParams,
+    render::Renderer,
+    texture::Texture,
+    uniforms::{Uniform, UniformBuffer},
+};
 
 
 struct CellSimulation {
     simulation: Simulation,
-    lattices: Vec<Lattice>,
     renderer: Renderer,
     uniform_buffer: UniformBuffer,
 }
@@ -56,9 +58,7 @@ impl framework::Framework for CellSimulation {
 
     fn init(
         config: &wgpu::SurfaceConfiguration,
-        _adapter: &wgpu::Adapter,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
     ) -> Self {
         // Create texture
         // Init life, setting the initial state
@@ -69,49 +69,40 @@ impl framework::Framework for CellSimulation {
         };
         let uniform_buffer = UniformBuffer::new(uniform, device);
         
-        let particles = vec![0, 1];
-        
+        // This same data is hard coded in the framework file!
         let render_param_data: Vec<usize> = vec![
-            768, // height
-            1024, // width
+            720, // height
+            1280, // width
         ];
-        let texture = Texture::new(&device, &render_param_data);
-
+        
         let render_params = RenderParams::new(device, &render_param_data);
-        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![2, 1, 1], device);
+        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![64, 64, 1], device);
+        let texture = Texture::new(&simulation_params.lattice_params, &device);
+        
+        let mut simulation = Simulation::new(simulation_params, device);
+        let renderer = Renderer::new(&uniform_buffer, &texture, &simulation.lattice_params.lattice_params, &render_params, config, device);
 
-        let mut lattices = Vec::<Lattice>::new();
-        for i in 0..2 {
-            lattices.push(Lattice::new(&simulation_params.lattice_params, device))
-        }
+        simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14);
+        // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
+        simulation.add_particle("p1", "one", 7);
 
-        lattices[0].init_random_particles(&particles);
-        println!("{}", lattices[0]);
-        println!("{:?}", lattices[0].occupancy);
-        let lattice_data = lattices[0].lattice.clone();
-        let occupancy_data = lattices[0].occupancy.clone();
-
-        lattices[0].rewrite_buffers(queue);
-        lattices[1].rewrite_buffer_data(queue, &lattice_data, &occupancy_data);
-
-        let simulation = Simulation::new(&uniform_buffer, &lattices, &simulation_params, &texture, device);
-        let renderer = Renderer::new(&uniform_buffer, &texture, &render_params, config, device);
-
+        simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
+        
         CellSimulation {
             simulation,
-            lattices,
             renderer,
-            uniform_buffer: uniform_buffer
+            uniform_buffer: uniform_buffer,
         }
     }
 
     fn render(
         &mut self,
+        mut mouse_slice: i32,
         view: &wgpu::TextureView,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         _spawner: &framework::Spawner,
-    ) {
+    ) -> i32 {
         // Create command encoder
         // Run life step
         // Run render step
@@ -120,41 +111,39 @@ impl framework::Framework for CellSimulation {
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         self.simulation.step(self.uniform_buffer.data.frame_num, &mut command_encoder);
-        self.renderer.render(&mut command_encoder, &view);
+        mouse_slice = self.renderer.render(mouse_slice, &mut command_encoder, &view);
         
         // Copy source to destination (lattice and occupancy)
         // This drops performance by 2x, but I don't know any other way to do it
         command_encoder.copy_buffer_to_buffer(
-            &self.lattices[frame_num as usize % 2].lattice_buff, 
+            &self.simulation.lattices[(frame_num as usize + 1) % 2].lattice_buff.as_ref().expect(""), 
             0, 
-            &self.lattices[(frame_num as usize + 1) % 2].lattice_buff, 
+            &self.simulation.lattices[frame_num as usize % 2].lattice_buff.as_ref().expect(""), 
             0,
-            self.lattices[frame_num as usize % 2].lattice_buff_size as u64
+            self.simulation.lattices[frame_num as usize % 2].lattice_buff_size as u64
         );
 
         command_encoder.copy_buffer_to_buffer(
-            &self.lattices[frame_num as usize % 2].occupancy_buff, 
+            &self.simulation.lattices[(frame_num as usize + 1) % 2].occupancy_buff.as_ref().expect(""), 
             0, 
-            &self.lattices[(frame_num as usize + 1) % 2].occupancy_buff, 
+            &self.simulation.lattices[frame_num as usize % 2].occupancy_buff.as_ref().expect(""), 
             0,
-            self.lattices[frame_num as usize % 2].occupancy_buff_size as u64
+            self.simulation.lattices[frame_num as usize % 2].occupancy_buff_size as u64
         );
 
-        queue.submit(Some(command_encoder.finish()));
+        //queue.submit(Some(command_encoder.finish()));
         self.uniform_buffer.data.frame_num += 1;
         self.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32;
 
         queue.write_buffer(&self.uniform_buffer.buffer, 0, bytemuck::cast_slice(&[self.uniform_buffer.data]));
+        queue.submit(Some(command_encoder.finish()));
 
-
-        // self.simulation.update_frame_num(self.frame_num, queue);
-        // self.renderer.update_uniforms(&self.uniforms, queue);
-        
+        return mouse_slice;
     }
 }
 
 /// run example
 fn main() {
-    //env::set_var("RUST_BACKTRACE", "1");
+    // env::set_var("RUST_BACKTRACE", "1");
     framework::run::<CellSimulation>("Cell Simulation");
 }

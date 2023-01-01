@@ -1,7 +1,5 @@
-use crate::{lattice_params::Params,preprocessor::ShaderBuilder};
+use crate::{lattice_params::Params,preprocessor::ShaderBuilder, WORKGROUP_SIZE};
 
-
-const WORKGROUP_SIZE: (u32, u32, u32) = (2, 1, 1);
 
 pub struct RDME {
     compute_pipeline: wgpu::ComputePipeline,
@@ -9,10 +7,12 @@ pub struct RDME {
 
 impl RDME {
     pub fn new( // Receive bind groups, build compute pipeline. Simulation is responsible for everything else
-        data_group_layout: &wgpu::BindGroupLayout,
-        lattice_group_layout: &wgpu::BindGroupLayout,
+        bind_group_layouts: &Vec<wgpu::BindGroupLayout>,
         device: &wgpu::Device,
     ) -> Self {
+        let data_bind_group_layout = &bind_group_layouts[0];
+        let lattice_bind_group_layout = &bind_group_layouts[1];
+
         let binding = ShaderBuilder::new("rdme.wgsl").unwrap();
         let shader_builder = binding.build();
         let compute_shader = device.create_shader_module(shader_builder);
@@ -20,7 +20,7 @@ impl RDME {
         let compute_pipeline_layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("RDME compute"),
-                bind_group_layouts: &[data_group_layout, lattice_group_layout],
+                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout],
                 push_constant_ranges: &[],
             }
         );
@@ -39,8 +39,10 @@ impl RDME {
         }
     }
 
+    
+
     pub fn step(
-        &mut self,
+        &self,
         data_bind_group: &wgpu::BindGroup,
         simulation_bind_group: &wgpu::BindGroup,
         command_encoder: &mut wgpu::CommandEncoder,
@@ -54,16 +56,16 @@ impl RDME {
         let xgroups = xdim / WORKGROUP_SIZE.0;
         let ydim = params.y_res as u32 + WORKGROUP_SIZE.1 - 1;
         let ygroups = ydim / WORKGROUP_SIZE.1;
-        let zdim = params.z_res as u32 + WORKGROUP_SIZE.1 - 1;
-        let zgroups = zdim / WORKGROUP_SIZE.1;
+        let zdim = params.z_res as u32 + WORKGROUP_SIZE.2 - 1;
+        let zgroups = zdim / WORKGROUP_SIZE.2;
         
+        // Main compute pass
         {
             let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, data_bind_group, &[]);
             cpass.set_bind_group(1, simulation_bind_group, &[]);
             cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
-        }
-
+        }        
     }
 }

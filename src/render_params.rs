@@ -8,15 +8,16 @@ use std::mem;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-struct Params {
-    width : u32,
-    height : u32,
+pub struct Params {
+    pub width : u32,
+    pub height : u32,
 }
 
 // ---------------------------------------------------------------------------
 
 pub struct RenderParams {
     param_buf : wgpu::Buffer,
+    pub params: Params
 }
 
 impl RenderParams {
@@ -36,6 +37,7 @@ impl RenderParams {
 
         RenderParams {
             param_buf,
+            params
         }
     }
 

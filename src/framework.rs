@@ -1,8 +1,12 @@
 use std::future::Future;
 use std::time::Instant;
+use imgui::*;
+use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
 use winit::{
-    event::{self, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event::{self, Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, MouseScrollDelta},
+    event_loop::{ControlFlow, EventLoop, },
+    window::Window,
+    dpi::LogicalSize,
 };
 
 #[allow(dead_code)]
@@ -39,9 +43,7 @@ pub trait Framework: 'static + Sized {
     }
     fn init(
         config: &wgpu::SurfaceConfiguration,
-        adapter: &wgpu::Adapter,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
     ) -> Self;
     fn resize(
         &mut self,
@@ -52,11 +54,12 @@ pub trait Framework: 'static + Sized {
     fn update(&mut self, event: WindowEvent);
     fn render(
         &mut self,
+        mouse_slice: i32,
         view: &wgpu::TextureView,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         spawner: &Spawner,
-    );
+    ) -> i32;
 }
 
 struct Setup {
@@ -78,20 +81,29 @@ async fn setup<F: Framework>(title: &str) -> Setup {
     let event_loop = EventLoop::new();
     let mut builder = winit::window::WindowBuilder::new();
     builder = builder.with_title(title);
-    let window = builder.build(&event_loop).unwrap();
 
     log::info!("Initializing the surface...");
 
     let backend = wgpu::util::backend_bits_from_env().unwrap_or_else(wgpu::Backends::all);
 
     let instance = wgpu::Instance::new(backend);
-    let (size, surface) = unsafe {
+
+    let (window, size, surface) = {
+        let version = env!("CARGO_PKG_VERSION");
+
+        let window = Window::new(&event_loop).unwrap();
+        window.set_inner_size(LogicalSize {
+            width: 1280.0,
+            height: 720.0,
+        });
+        window.set_title(&format!("imgui-wgpu {}", version));
         let size = window.inner_size();
 
-        let surface = instance.create_surface(&window);
+        let surface = unsafe { instance.create_surface(&window) };
 
-        (size, surface)
+        (window, size, surface)
     };
+
     let adapter =
         wgpu::util::initialize_adapter_from_env_or_default(&instance, backend, Some(&surface))
             .await
@@ -101,8 +113,6 @@ async fn setup<F: Framework>(title: &str) -> Setup {
         let adapter_info = adapter.get_info();
         println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
     }
-
-    println!("Texture format: {:?}", wgpu::Adapter::get_texture_format_features(&adapter, wgpu::TextureFormat::R32Float));
 
     let optional_features = F::optional_features();
     let required_features = F::required_features();
@@ -169,114 +179,200 @@ fn start<F: Framework>(
     }: Setup,
 ) {
     let spawner = Spawner::new();
-    let mut config = wgpu::SurfaceConfiguration {
+    let surface_desc = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface.get_supported_formats(&adapter)[0],
-        width: size.width,
-        height: size.height,
+        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+        width: size.width as u32,
+        height: size.height as u32,
         present_mode: wgpu::PresentMode::Fifo,
-        alpha_mode: surface.get_supported_alpha_modes(&adapter)[0],
+        alpha_mode: wgpu::CompositeAlphaMode::Auto,
     };
-    surface.configure(&device, &config);
+    surface.configure(&device, &surface_desc);
 
-    log::info!("Initializing the program...");
-    let mut program = F::init(&config, &adapter, &device, &queue);
 
     let mut last_frame_inst = Instant::now();
-    let (mut frame_count, mut accum_time) = (0, 0.0);
+    let (mut frame_count, mut accum_time, mut fps) = (0, 0., 0.);
+    let hidpi_factor = window.scale_factor();
 
+    // Set up dear imgui
+    let mut imgui = imgui::Context::create();
+    let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
+    platform.attach_window(
+        imgui.io_mut(),
+        &window,
+        imgui_winit_support::HiDpiMode::Default,
+    );
+    imgui.set_ini_filename(None);
+
+    let font_size = (13.0 * hidpi_factor) as f32;
+    imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+
+    imgui.fonts().add_font(&[FontSource::DefaultFontData {
+        config: Some(imgui::FontConfig {
+            oversample_h: 1,
+            pixel_snap_h: true,
+            size_pixels: font_size,
+            ..Default::default()
+        }),
+    }]);
+
+    //
+    // Set up dear imgui wgpu renderer
+    //
+    // let clear_color = wgpu::Color {
+    //     r: 0.1,
+    //     g: 0.2,
+    //     b: 0.3,
+    //     a: 1.0,
+    // };
+
+    let renderer_config = RendererConfig {
+        texture_format: surface_desc.format,
+        ..Default::default()
+    };
+
+    let mut renderer = Renderer::new(&mut imgui, &device, &queue, renderer_config);
+
+    log::info!("Initializing the program...");
+    let mut program = F::init(&surface_desc, &device);  // This calls the main program
+
+    let mut slice_wheel: i32 = 0;
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
-        let _ = (&instance, &adapter); // force ownership by the closure
+        //let _ = (&instance, &adapter); // force ownership by the closure
         *control_flow = if cfg!(feature = "metal-auto-capture") {
             ControlFlow::Exit
         } else {
             ControlFlow::Poll
         };
         match event {
-            event::Event::RedrawEventsCleared => {
-                spawner.run_until_stalled();
+            Event::WindowEvent {
+                event: WindowEvent::Resized(_),
+                ..
+            } => {
+                let size = window.inner_size();
 
-                window.request_redraw();
+                let surface_desc = wgpu::SurfaceConfiguration {
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    width: size.width as u32,
+                    height: size.height as u32,
+                    present_mode: wgpu::PresentMode::Fifo,
+                    alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                };
+
+                surface.configure(&device, &surface_desc);
             }
-            event::Event::WindowEvent {
+            Event::WindowEvent {
                 event:
-                    WindowEvent::Resized(size)
-                    | WindowEvent::ScaleFactorChanged {
-                        new_inner_size: &mut size,
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                state: ElementState::Pressed,
+                                ..
+                            },
                         ..
                     },
                 ..
-            } => {
-                log::info!("Resizing to {:?}", size);
-                config.width = size.width.max(1);
-                config.height = size.height.max(1);
-                program.resize(&config, &device, &queue);
-                surface.configure(&device, &config);
             }
-            event::Event::WindowEvent { event, .. } => match event {
-                WindowEvent::KeyboardInput {
-                    input:
-                        event::KeyboardInput {
-                            virtual_keycode: Some(event::VirtualKeyCode::Escape),
-                            state: event::ElementState::Pressed,
-                            ..
-                        },
-                    ..
-                }
-                | WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                
-                WindowEvent::KeyboardInput {
-                    input:
-                        event::KeyboardInput {
-                            virtual_keycode: Some(event::VirtualKeyCode::R),
-                            state: event::ElementState::Pressed,
-                            ..
-                        },
-                    ..
-                } => {
-                    println!("{:#?}", instance.generate_report());
-                }
-                _ => {
-                    program.update(event);
+            | Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+
+            Event::WindowEvent { 
+                event: WindowEvent::MouseWheel { delta, .. },
+                ..
+            } => {
+                match delta {
+                    MouseScrollDelta::LineDelta(_, y) => {
+                        slice_wheel += y as i32;
+                    },
+                    MouseScrollDelta::PixelDelta(_) => {}
                 }
             },
-            event::Event::RedrawRequested(_) => {
+            Event::MainEventsCleared => window.request_redraw(), event::Event::RedrawEventsCleared => {
                 {
                     accum_time += last_frame_inst.elapsed().as_secs_f32();
                     last_frame_inst = Instant::now();
                     frame_count += 1;
                     if frame_count == 100 {
-                        println!(
-                            "Avg frame time {}ms",
-                            accum_time * 1000.0 / frame_count as f32
-                        );
+                        fps = frame_count as f32 / accum_time;
+                        // println!(
+                        //     "Avg frame time {}ms",
+                        //     accum_time * 1000.0 / frame_count as f32
+                        // );
                         accum_time = 0.0;
                         frame_count = 0;
                     }
                 }
-
+                
                 let frame = match surface.get_current_texture() {
                     Ok(frame) => frame,
-                    Err(_) => {
-                        surface.configure(&device, &config);
-                        surface
-                            .get_current_texture()
-                            .expect("Failed to acquire next surface texture!")
+                    Err(e) => {
+                        eprintln!("dropped frame: {:?}", e);
+                        return;
                     }
                 };
+                platform
+                    .prepare_frame(imgui.io_mut(), &window)
+                    .expect("Failed to prepare frame");
+
+                let ui = imgui.frame();
+                // FPS
+                {   
+                    let display_size = ui.io().display_size;
+                    let window = ui.window("Information");
+                    window
+                        .size([200.0, display_size[1]], Condition::Always)
+                        .position([0.0, 0.0], Condition::Always)
+                        .build(|| {
+                            ui.text(format!("FPS: {:.1}", fps));
+                            ui.text(format!("Slice: {}", slice_wheel));
+                            
+                        });
+                    
+                    //ui.show_metrics_window(&mut true);
+                }
+
                 let view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
+                
+                // Render the background
+                slice_wheel = program.render(slice_wheel, &view, &device, &queue, &spawner);
 
-                program.render(&view, &device, &queue, &spawner);
+                let mut encoder: wgpu::CommandEncoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load, // Do not clear
+                            // load: wgpu::LoadOp::Clear(clear_color),
+                            store: true,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                });
+                
+                renderer
+                    .render(imgui.render(), &queue, &device, &mut rpass)
+                    .expect("Rendering failed");
+                    
+                drop(rpass);
+
+                queue.submit(Some(encoder.finish()));
 
                 frame.present();
             }
             _ => {}
         }
+        platform.handle_event(imgui.io_mut(), &window, &event);
     });
 }
 

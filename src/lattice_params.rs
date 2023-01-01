@@ -10,16 +10,16 @@ use crate::MAX_PARTICLES_SITE;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Params {
-    // x, y, z are measurements
-    x: f32,
-    y: f32,
-    z: f32,
+    // x, y, z are measurements. Making this a vector would be more elegant. TODO
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
     pub x_res : u32,
     pub y_res: u32,
     pub z_res: u32,
     max_particles_site: u32,
-    lambda: f32,
-    D: f32,
+    pub n_regions: u32,
+    lambda: f32, // I hope this only depends on the lattice constants.
     tau: f32
 }
 
@@ -27,7 +27,7 @@ pub struct Params {
 
 pub struct LatticeParams {
     pub lattice_params: Params,
-    param_buf: wgpu::Buffer,
+    param_buf: Option<wgpu::Buffer>,
 }
 
 impl LatticeParams {
@@ -43,25 +43,31 @@ impl LatticeParams {
             y_res: resolution[1] as u32,
             z_res: resolution[2] as u32,
             max_particles_site: MAX_PARTICLES_SITE as u32,
-            lambda: 1.,
-            D: 1.,
-            tau: 0.1
+            n_regions: 1,
+            lambda: 31.25E-9,
+            tau: 2E-3
         };
-
-        let param_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("parameters buffer"),
-            contents: bytemuck::bytes_of(&lattice_params),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
 
         LatticeParams {
             lattice_params,
-            param_buf,
+            param_buf: None,
         }
+    }
+
+    pub fn create_buffer(&mut self, device: &wgpu::Device) {
+        self.param_buf = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("parameters buffer"),
+            contents: bytemuck::bytes_of(&self.lattice_params),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        }));
     }
 
     pub fn size(&self) -> usize {
         mem::size_of::<Params>()
+    }
+
+    pub fn buffer_size(&self) -> Option<wgpu::BufferSize> {
+        wgpu::BufferSize::new(self.size() as _, )
     }
 
     pub fn dimensions(&self) -> usize {
@@ -69,7 +75,7 @@ impl LatticeParams {
     }
 
     pub fn binding_resource(&self) -> wgpu::BindingResource {
-        self.param_buf.as_entire_binding()
+        self.param_buf.as_ref().expect("Buffer not created yet").as_entire_binding()
     }
 
     pub fn binding_type(&self) -> wgpu::BindingType {

@@ -1,4 +1,4 @@
-use crate::lattice_params::LatticeParams;
+use crate::lattice_params::{Params};
 
 pub struct Texture {
     pub texture_view: wgpu::TextureView,
@@ -8,21 +8,21 @@ pub struct Texture {
 impl Texture {
     // This is important: https://www.w3.org/TR/WGSL/#storage-texel-formats
     pub fn new(
+        lattice_params: &Params,
         device: &wgpu::Device,
-        params: &Vec<usize>,
     ) -> Self {
         // TODO: I don't know if this is a good format. Leave it for now.
         let format = wgpu::TextureFormat::R32Float;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
-                width: params[1] as u32,
-                height: params[0] as u32,
-                depth_or_array_layers: 1,
+                width: lattice_params.x_res,
+                height: lattice_params.y_res,
+                depth_or_array_layers: lattice_params.z_res,
             },
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
+            dimension: wgpu::TextureDimension::D3,
             format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING 
             | wgpu::TextureUsages::COPY_DST 
@@ -47,7 +47,7 @@ impl Texture {
         wgpu::BindingType::StorageTexture {
             access,
             format: self.format,
-            view_dimension: wgpu::TextureViewDimension::D2,
+            view_dimension: wgpu::TextureViewDimension::D3,
         }
     }
 }
