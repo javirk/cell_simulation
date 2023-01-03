@@ -16,21 +16,37 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let occupancy: u32 = occupancyDest[idx_occupancy];
 
     // Find the majority element in the volume
-    var maxcount: u32 = 0u;
-    var element_max_freq: u32 = 0u;
-    for (var i = 0u; i < occupancy; i += 1u) {
-        var count = 0u;
-        for (var j = 0u; j < occupancy; j += 1u) {
-            if (latticeDest[idx_lattice + i] == latticeDest[idx_lattice + j]) {
-                count += 1u;
-            }
-        }
-        if (count > maxcount) {
-            maxcount = count;
-            element_max_freq = latticeDest[idx_lattice + i];
+    // var maxcount: u32 = 0u;
+    // var element_max_freq: u32 = 0u;
+    // for (var i = 0u; i < occupancy; i += 1u) {
+    //     var count = 0u;
+    //     for (var j = 0u; j < occupancy; j += 1u) {
+    //         if (latticeDest[idx_lattice + i] == latticeDest[idx_lattice + j]) {
+    //             count += 1u;
+    //         }
+    //     }
+    //     if (count > maxcount) {
+    //         maxcount = count;
+    //         element_max_freq = latticeDest[idx_lattice + i];
+    //     }
+    // }
+    // textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(element_max_freq), 0.0, 0.0, 0.0));
+    var color: u32 = 0u;
+    var debug_occ: u32 = 0u;
+    for (var i = 0u; i < params.max_particles_site; i += 1u) {
+        if (latticeDest[idx_lattice + i] == 1u) {
+            color = 1u;
+            debug_occ += 1u;
+            // break;
         }
     }
-    textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(element_max_freq), 0.0, 0.0, 0.0));
+    if debug_occ != occupancy {
+        color = 1u;
+    } else {
+        color = 0u;
+    }
+
+    textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(color), 0.0, 0.0, 0.0));
 
     // Reorder the lattice elements. All 0 at the end. O(N) complexity, N = max_particles_site
     var j = 0u;

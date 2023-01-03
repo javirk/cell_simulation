@@ -21,7 +21,7 @@ struct Lattice {
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<u32>;
-@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
+//@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
 
 
 fn lock(location: i32) -> bool {
@@ -41,7 +41,7 @@ fn writeLatticeSite(idx_lattice: i32, value: u32) {
     for (var i = 0u; i < params.max_particles_site; i += 1u) {
         let idx = idx_lattice + i32(i);
         if (latticeDest.lattice[idx] == 0u) {
-            latticeDest.lattice[idx] = value;
+            latticeDest.lattice[idx] = 1u;
             return;
         }
     }
@@ -58,31 +58,24 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
    
     // First, move particle away. Lock the destination cube for that
     loop {
-        if (lock(idx_occupancy_dest)) {
-            //let idx_destination: i32 = get_index_lattice(volume_dest, params) + i32(occupancyDest[idx_occupancy_dest]);
-        
+        if (lock(idx_occupancy_dest) && lock(idx_occupancy_src)) {
             // Make sure that the destination lattice is not full
             if (occupancyDest[idx_occupancy_dest] >= params.max_particles_site) { 
                 unlock(idx_occupancy_dest);
+                unlock(idx_occupancy_src);
                 return;
             }
 
             writeLatticeSite(idx_lattice_dest, particle);
             // latticeDest.lattice[idx_destination] = particle;
             occupancyDest[idx_occupancy_dest] += 1u;
-            unlock(idx_occupancy_dest);
-            break;
-        }
-        unlock(idx_occupancy_dest);
-    }
-
-    loop {
-        if (lock(idx_occupancy_src)) {
             latticeDest.lattice[idx_particle] = 0u;
             occupancyDest[idx_occupancy_src] -= 1u;
+            unlock(idx_occupancy_dest);
             unlock(idx_occupancy_src);
             break;
         }
+        unlock(idx_occupancy_dest);
         unlock(idx_occupancy_src);
     }
 
@@ -90,7 +83,6 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
 
 
 fn move_particle(particle: u32, i_movement: i32, id_volume: vec3<u32>, initial_index: u32) -> f32 {
-    var occ_dest: u32;
     var volume_dest: vec3<u32> = id_volume;
     switch i_movement {
         case 0: {
@@ -212,14 +204,11 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx_lattice = u32(get_index_lattice(global_id, params));
     let idx_occupancy = get_index_occupancy(global_id, params);
 
-    //let occupancy: u32 = occupancySrc[idx_occupancy];
+    let occupancy: u32 = occupancySrc[idx_occupancy];
     var state: u32;
     var rand_number: f32;
 
-    for (var i_part: u32 = idx_lattice; i_part < idx_lattice + particles_site; i_part += 1u) {
-        if latticeSrc.lattice[i_part] == 0u {
-            continue;
-        }
+    for (var i_part: u32 = idx_lattice; i_part < idx_lattice + occupancy; i_part += 1u) {
         // For each particle, we have to find D. It also depends on the neighbouring regions
         var p: array<f32, 7>;
         create_probability_vector(global_id, latticeSrc.lattice[i_part], &p);

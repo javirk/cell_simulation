@@ -175,8 +175,8 @@ impl Renderer {
         let scaling_y = l / height;
         let left_margin = 200. / width;  // Because of the GUI. Left margin is 200 pixels.
         let instances = (0..lattice_params.z_res).flat_map(|z| {
-            (0..lattice_params.y_res).flat_map(move |y| {
-                (0..lattice_params.x_res).map(move |x|{
+            (0..lattice_params.x_res).flat_map(move |x| {
+                (0..lattice_params.y_res).map(move |y|{
                     let position = cgmath::Vector3 { 
                         x: lattice_res_f32[0] * scaling_x * (1. / lattice_res_f32[0]) * (2. * (x as f32) - lattice_res_f32[0] + 1.) + left_margin,
                         y: lattice_res_f32[1] * scaling_y * (1. / lattice_res_f32[1]) * (2. * (y as f32) - lattice_res_f32[1] + 1.),
