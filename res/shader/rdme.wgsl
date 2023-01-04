@@ -21,7 +21,7 @@ struct Lattice {
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<atomic<u32>>;
-//@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
+@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
 
 
 fn lock(location: i32) -> bool {
@@ -37,23 +37,16 @@ fn unlock(location: i32) {
     atomicStore(&locks[location], 0u);
 }
 
-// Atomic Compare Exchange Weak:
-fn atomicCompareExchangeWeak_custom(location: i32, expected: u32, desired: u32) -> bool {
-    let lattice_ptr = &latticeDest.lattice[location];
-    let original_value = atomicLoad(lattice_ptr);
-    if (original_value == expected) {
-        atomicStore(lattice_ptr, desired);
-        return true;
-    }
-    return false;
-}
 
 fn writeLatticeSite(idx_lattice: i32, value: u32) {
     var i = 0;
     let max_particles = i32(params.max_particles_site);
+    var success = false;
 
     loop {
-        if atomicCompareExchangeWeak_custom(idx_lattice + i, 0u, value) && (i < max_particles) {
+        var resValue = atomicCompareExchangeWeak(&(latticeDest.lattice[idx_lattice + i]), 0u, value);
+        success = resValue.exchanged;
+        if (success || (i >= max_particles)) {
             break;
         }
         i += 1;
@@ -192,7 +185,7 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
 
 @compute @workgroup_size(1, 1, 1)
 fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    //textureStore(texture, vec2<i32>(0,0), vec4<f32>(0., 0.0, 0.0, 1.0));
+    textureStore(texture, vec3<i32>(0, 0, 0), vec4<f32>(0., 0., 0., 0.));
     let X: u32 = global_id.x;
     let Y: u32 = global_id.y;
     let Z: u32 = global_id.z;

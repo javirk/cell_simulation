@@ -9,7 +9,7 @@ winit = "0.27.5"
 env_logger = "0.9"
 log = "0.4"
 pollster = "0.2.5"
-wgpu = "0.14"
+wgpu = "0.14.2"
 bytemuck = { version = "1.4", features = ["derive"]}
 anyhow = "1.0"
 rand = "0.8.5"
@@ -19,6 +19,9 @@ imgui = "0.9"
 imgui-winit-support = { version = "0.9"  }
 imgui-wgpu = "0.21.0"
 cgmath = "0.18"
+
+[patch.crates-io]
+naga = { git = "https://github.com/gfx-rs/naga.git#e98bd9264c3a6b04dff15a6b1213c0c80201740a" }  # For atomicCompareExchangeWeak
 
 [workspace]
 resolver = "2"
