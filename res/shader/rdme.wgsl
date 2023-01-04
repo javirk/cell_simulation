@@ -7,7 +7,7 @@ struct Uniforms {
 }
 
 struct Lattice {
-    lattice: array<u32>,
+    lattice: array<atomic<u32>>,
 };
 
 
@@ -20,7 +20,7 @@ struct Lattice {
 @group(1) @binding(0) var<storage> latticeSrc: Lattice;
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
-@group(1) @binding(3) var<storage, read_write> occupancyDest: array<u32>;
+@group(1) @binding(3) var<storage, read_write> occupancyDest: array<atomic<u32>>;
 //@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
 
 
@@ -37,13 +37,26 @@ fn unlock(location: i32) {
     atomicStore(&locks[location], 0u);
 }
 
+// Atomic Compare Exchange Weak:
+fn atomicCompareExchangeWeak_custom(location: i32, expected: u32, desired: u32) -> bool {
+    let lattice_ptr = &latticeDest.lattice[location];
+    let original_value = atomicLoad(lattice_ptr);
+    if (original_value == expected) {
+        atomicStore(lattice_ptr, desired);
+        return true;
+    }
+    return false;
+}
+
 fn writeLatticeSite(idx_lattice: i32, value: u32) {
-    for (var i = 0u; i < params.max_particles_site; i += 1u) {
-        let idx = idx_lattice + i32(i);
-        if (latticeDest.lattice[idx] == 0u) {
-            latticeDest.lattice[idx] = 1u;
-            return;
+    var i = 0;
+    let max_particles = i32(params.max_particles_site);
+
+    loop {
+        if atomicCompareExchangeWeak_custom(idx_lattice + i, 0u, value) && (i < max_particles) {
+            break;
         }
+        i += 1;
     }
 }
 
@@ -56,29 +69,16 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
     let idx_occupancy_dest: i32 = get_index_occupancy(volume_dest, params);
     let idx_lattice_dest: i32 = get_index_lattice(volume_dest, params);
    
-    // First, move particle away. Lock the destination cube for that
-    loop {
-        if (lock(idx_occupancy_dest) && lock(idx_occupancy_src)) {
-            // Make sure that the destination lattice is not full
-            if (occupancyDest[idx_occupancy_dest] >= params.max_particles_site) { 
-                unlock(idx_occupancy_dest);
-                unlock(idx_occupancy_src);
-                return;
-            }
-
-            writeLatticeSite(idx_lattice_dest, particle);
-            // latticeDest.lattice[idx_destination] = particle;
-            occupancyDest[idx_occupancy_dest] += 1u;
-            latticeDest.lattice[idx_particle] = 0u;
-            occupancyDest[idx_occupancy_src] -= 1u;
-            unlock(idx_occupancy_dest);
-            unlock(idx_occupancy_src);
-            break;
-        }
-        unlock(idx_occupancy_dest);
-        unlock(idx_occupancy_src);
+    // First, move particle away. If it doesn't fit, move it back
+    let num_particles_dest = atomicAdd(&occupancyDest[idx_occupancy_dest], 1u);
+    if num_particles_dest <= params.max_particles_site {
+        writeLatticeSite(idx_lattice_dest, particle);
+        atomicSub(&occupancyDest[idx_occupancy_src], 1u);
+        atomicStore(&latticeDest.lattice[idx_particle], 0u);
+    } else {
+        // Particle doesn't fit
+        atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
     }
-
 }
 
 
@@ -209,6 +209,9 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var rand_number: f32;
 
     for (var i_part: u32 = idx_lattice; i_part < idx_lattice + occupancy; i_part += 1u) {
+        if latticeSrc.lattice[i_part] == 0u {
+            continue;
+        }
         // For each particle, we have to find D. It also depends on the neighbouring regions
         var p: array<f32, 7>;
         create_probability_vector(global_id, latticeSrc.lattice[i_part], &p);
@@ -220,6 +223,11 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         while (rand_number > p[i]) {
             i += 1;
         }
+        // if (rand_number < 0.5) {
+        //     i = 0;
+        // } else {
+        //     i = 1;
+        // }
                         
         let val = move_particle(latticeSrc.lattice[i_part], i, global_id, i_part);
     }

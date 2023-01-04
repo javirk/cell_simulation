@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use lattice_params::LatticeParams;
 use simulation::Simulation;
 
-const MAX_PARTICLES_SITE: usize = 16;
+const MAX_PARTICLES_SITE: usize = 4;
 const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);
 
 mod simulation;
@@ -76,7 +76,7 @@ impl framework::Framework for CellSimulation {
         ];
         
         let render_params = RenderParams::new(device, &render_param_data);
-        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![32, 32, 1], device);
+        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![2, 2, 1], device);
         let texture = Texture::new(&simulation_params.lattice_params, &device);
         
         let mut simulation = Simulation::new(simulation_params, device);
@@ -84,7 +84,7 @@ impl framework::Framework for CellSimulation {
 
         simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14);
         // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
-        simulation.add_particle("p1", "one", 10);
+        simulation.add_particle("p1", "one", 4);
 
         simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
         

@@ -12,8 +12,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let Y: u32 = global_id.y;
     let Z: u32 = global_id.z;
     let idx_lattice = u32(get_index_lattice(global_id, params));
-    let idx_occupancy = get_index_occupancy(global_id, params);
-    let occupancy: u32 = occupancyDest[idx_occupancy];
+    // let idx_occupancy = get_index_occupancy(global_id, params);
+    // let occupancy: u32 = occupancyDest[idx_occupancy];
 
     // Find the majority element in the volume
     // var maxcount: u32 = 0u;
@@ -37,14 +37,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         if (latticeDest[idx_lattice + i] == 1u) {
             color = 1u;
             debug_occ += 1u;
-            // break;
+            break;
         }
     }
-    if debug_occ != occupancy {
-        color = 1u;
-    } else {
-        color = 0u;
-    }
+    // if debug_occ != occupancy {
+    //     color = 1u;
+    // } else {
+    //     color = 0u;
+    // }
 
     textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(color), 0.0, 0.0, 0.0));
 
