@@ -16,6 +16,7 @@ mod texture;
 mod render_params;
 mod preprocessor;
 mod uniforms;
+mod cme;
 
 use crate::{
     render_params::RenderParams,

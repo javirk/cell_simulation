@@ -6,38 +6,58 @@ use crate::{
     lattice::Lattice,
     uniforms::UniformBuffer, types::{Region, Particle},
     WORKGROUP_SIZE,
-    preprocessor::ShaderBuilder
+    preprocessor::ShaderBuilder,
+    cme::CME
 };
 
 pub struct Simulation {
     // Data for the compute shader.
     rdme: Option<RDME>,
+    cme: Option<CME>,
     bind_groups: Vec<wgpu::BindGroup>,
     pub lattices: Vec<Lattice>,
     pub lattice_params: LatticeParams,
     regions: Regions,
-    locks: Lock,
-    diffusion_matrix: Matrix,
+    diffusion_matrix: Matrix<f32>,
+    stoichiometry_matrix: Matrix<u32>,
+    reactions_idx: Matrix<u32>,
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
 
-struct Matrix {
-    matrix: Vec<f32>,
+struct Matrix<T> {
+    matrix: Vec<T>,
     buffer: Option<wgpu::Buffer>,
-    buf_size: Option<wgpu::BufferSize>
+    buf_size: Option<wgpu::BufferSize>,
+    num_rows: u32,
+    num_columns: u32,
+}
+
+impl<T> Matrix<T> where T: bytemuck::Pod + bytemuck::Zeroable {  // Not sure about this
+    pub fn add_buffer(&mut self, device: &wgpu::Device, buffer_size: usize, label: Option<&str>) {
+        
+        self.buffer = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: label,
+            contents: bytemuck::cast_slice(&self.matrix),
+            usage: wgpu::BufferUsages::STORAGE,
+        }));
+        self.buf_size = wgpu::BufferSize::new(buffer_size as _,);
+    }
+
+    pub fn add_uniform_column(&mut self, value: T) {
+        for i in 0..self.num_rows {
+            let index = (i + 1) * self.num_columns;
+            self.matrix.insert(index as usize, value);
+        }
+        self.num_columns += 1;
+    }
 }
 
 struct Regions {
-    regions: Vec<Region>,
+    regions: Vec<Region>, // --> Should maybe be a Matrix to have the buffer and the size together.
     positions: Vec<Vec<Vec<f32>>>,  // Starting corner, ending corner
     names: Vec<String>,
     buffer: Option<wgpu::Buffer>,
     buf_size: Option<wgpu::BufferSize>
-}
-
-struct Lock {
-    buffer: wgpu::Buffer,
-    buf_size: Option<wgpu::BufferSize>,
 }
 
 impl Simulation {
@@ -51,8 +71,6 @@ impl Simulation {
             lattices.push(Lattice::new(&lattice_params.lattice_params, device))
         }
 
-        //lattices[0].init_random_particles(&particles);
-
         let regions = Regions {
             regions: vec![0 as Region; lattice_params.dimensions()],
             positions: vec![vec![vec![0.; 3], vec![1.; 3]]; 1],
@@ -65,23 +83,39 @@ impl Simulation {
         let diffusion_matrix = Matrix {
             matrix: vec![8.15E-14; 1],
             buffer: None,
-            buf_size: None
+            buf_size: None,
+            num_rows: 1,
+            num_columns: 1
         };
 
-        let lock = Simulation::prepare_locks(&lattices[0], device);
+        let stoichiometry_matrix = Matrix {
+            matrix: Vec::<u32>::new(),
+            buffer: None,
+            buf_size: None,
+            num_rows: 0,
+            num_columns: 0
+        };
 
-        //let bind_group_layouts = Simulation::build_bind_group_layouts(&lattice_params, &lattices, uniform_buffer, &lock, texture, device);
-        
+        let reactions_idx = Matrix {
+            matrix: Vec::<u32>::new(),
+            buffer: None,
+            buf_size: None,
+            num_rows: 0,
+            num_columns: 0
+        };
+
         let bind_groups = Vec::<wgpu::BindGroup>::new();
 
         Simulation {
+            cme: None,
             rdme: None,
             bind_groups,
             lattices,
             lattice_params,
             regions,
-            locks: lock,
             diffusion_matrix,
+            stoichiometry_matrix,
+            reactions_idx,
             texture_compute_pipeline: None
         }
         
@@ -114,15 +148,9 @@ impl Simulation {
         self.lattices[0].start_buffers(device);
         self.lattices[1].start_buffers(device);
         
-        // I'll have to write the buffers here: diffusion matrix and regions
         // Diffusion matrix
-        let diffusion_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Diffusion matrix buffer"),
-            contents: bytemuck::cast_slice(&self.diffusion_matrix.matrix),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
-        self.diffusion_matrix.buffer = Some(diffusion_matrix_buffer);
-        self.diffusion_matrix.buf_size = wgpu::BufferSize::new((self.diffusion_matrix.matrix.len() * std::mem::size_of::<f32>()) as _,);
+        let diff_buffer_size = self.diffusion_matrix.matrix.len() * std::mem::size_of::<f32>();
+        self.diffusion_matrix.add_buffer(device, diff_buffer_size, Some("Diffusion matrix buffer"));
 
         // Regions
         let regions_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -133,8 +161,15 @@ impl Simulation {
         self.regions.buffer = Some(regions_buffer);
         self.regions.buf_size = wgpu::BufferSize::new((self.regions.regions.len() * std::mem::size_of::<Region>()) as _,);
         self.lattice_params.create_buffer(device);
+        
+        // Stoichiometry matrix
+        let stoich_buffer_size = self.stoichiometry_matrix.matrix.len() * std::mem::size_of::<u32>();
+        self.stoichiometry_matrix.add_buffer(device, stoich_buffer_size, Some("Stoichiometry matrix buffer"));
 
-        // Bind group layouts should also be built here. Problem is, they are needed for RDME before.
+        // Reactions idx
+        let reactions_idx_buffer_size = self.reactions_idx.matrix.len() * std::mem::size_of::<u32>();
+        self.reactions_idx.add_buffer(device, reactions_idx_buffer_size, Some("Reactions idx buffer"));
+
         let bind_group_layouts = self.build_bind_group_layouts(uniform_buffer, texture, device);
 
         // RDME
@@ -229,7 +264,11 @@ impl Simulation {
         self.diffusion_matrix.matrix.append(&mut slice); 
         println!("Particle {} added. New diffusion matrix: {:?}", name, self.diffusion_matrix.matrix);
 
+        // Add one column to stoichiometry matrix.
+        self.stoichiometry_matrix.add_uniform_column(0);
     }
+
+
     #[allow(dead_code)]
     pub fn set_diffusion_rate() {
         // TODO
@@ -237,6 +276,14 @@ impl Simulation {
     #[allow(dead_code)]
     pub fn set_diffusion_rate_particle() {
         // TODO
+    }
+
+    pub fn add_reaction() {
+        // Add a reaction to the simulation. It is independent of the region since particles are defined per region.
+        // Steps:
+        // 1. Add row to stoichiometry matrix. This row has values 
+        // 2. Add row to index matrix
+
     }
 
     fn matrix_to_matrix(mtx: &Vec<f32>, new_mtx: &mut Vec<f32>, prev_rowcol: usize, new_rowcol: usize, third_dim: usize) {
@@ -253,32 +300,6 @@ impl Simulation {
 
 // GPU functions
 impl Simulation {
-    #[allow(dead_code)]
-    pub fn copy_buffers_data(&mut self, queue: &wgpu::Queue) {
-        let lattice_data = self.lattices[0].lattice.clone();
-        let occupancy_data = self.lattices[0].occupancy.clone();
-
-        // self.lattices[0].rewrite_buffers(queue);
-        // self.lattices[1].rewrite_buffer_data(queue, &lattice_data, &occupancy_data);
-
-    }
-
-    fn prepare_locks(lattice: &Lattice, device: &wgpu::Device) -> Lock {
-        let lock: Vec<u32> = vec![0; lattice.occupancy.len()];
-        let lock_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Lock buffer"),
-                contents: bytemuck::cast_slice(&lock),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            }
-        );
-        let lock_buff_size = wgpu::BufferSize::new((lock.len() * std::mem::size_of::<u32>()) as _,);
-        Lock {
-            buffer: lock_buffer,
-            buf_size: lock_buff_size
-        }
-    }
-
     fn build_bind_group_layouts(
         &self,
         uniform_buffer: &UniformBuffer,
@@ -305,19 +326,9 @@ impl Simulation {
                         ty: uniform_buffer.binding_type(),
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer { 
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: self.locks.buf_size
-                        },
-                        count: None,
-                    },
                     // Region data
                     wgpu::BindGroupLayoutEntry {
-                        binding: 3,
+                        binding: 2,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -328,7 +339,7 @@ impl Simulation {
                     },
                     // Diffusion matrix
                     wgpu::BindGroupLayoutEntry {
-                        binding: 4,
+                        binding: 3,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -424,14 +435,10 @@ impl Simulation {
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: self.locks.buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
                         resource: self.regions.buffer.as_ref().expect("").as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
-                        binding: 4,
+                        binding: 3,
                         resource: self.diffusion_matrix.buffer.as_ref().expect("").as_entire_binding(),
                     },
                 ],

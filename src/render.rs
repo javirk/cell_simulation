@@ -1,14 +1,12 @@
 use bytemuck::{Pod, Zeroable};
 use std::{mem};
 use wgpu::util::DeviceExt;
-use cgmath::{prelude::*, vec1};
-use rand;
 
 use crate::{
     texture::Texture, 
     render_params::RenderParams, 
     preprocessor::ShaderBuilder,
-    uniforms::UniformBuffer, lattice_params::Params, lattice
+    uniforms::UniformBuffer, lattice_params::Params
 };
 
 pub struct Renderer {

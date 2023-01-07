@@ -20,6 +20,7 @@ struct Lattice {
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<atomic<u32>>;
+@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
 
 
 
@@ -157,7 +158,7 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
         probability_vector[5] = 0.;
     }
     
-    // TODO: Remove this loop
+    //var cumulative_probability: array<f32, 7>;
     for (var i: u32 = 0u; i < 6u; i += 1u) {
         (*cumulative_probability)[i] = probability_vector[i];
         if (i > 0u) {
@@ -170,7 +171,7 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
 
 @compute @workgroup_size(1, 1, 1)
 fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    //textureStore(texture, vec3<i32>(0, 0, 0), vec4<f32>(0., 0., 0., 0.));
+    textureStore(texture, vec3<i32>(0, 0, 0), vec4<f32>(0., 0., 0., 0.));
     let X: u32 = global_id.x;
     let Y: u32 = global_id.y;
     let Z: u32 = global_id.z;
