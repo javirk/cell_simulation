@@ -1,3 +1,5 @@
+use std::iter::Product;
+
 use wgpu::{util::DeviceExt};
 use crate::{
     rdme::RDME, 
@@ -21,6 +23,7 @@ pub struct Simulation {
     diffusion_matrix: Matrix<f32>,
     stoichiometry_matrix: Matrix<u32>,
     reactions_idx: Matrix<u32>,
+    reaction_rates: Vec<f32>,
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
 
@@ -49,6 +52,12 @@ impl<T> Matrix<T> where T: bytemuck::Pod + bytemuck::Zeroable {  // Not sure abo
             self.matrix.insert(index as usize, value);
         }
         self.num_columns += 1;
+    }
+
+    pub fn add_row(&mut self, row: Vec<T>) {
+        assert!(row.len() == self.num_columns as usize);
+        self.matrix.extend(row);
+        self.num_rows += 1;
     }
 }
 
@@ -89,20 +98,21 @@ impl Simulation {
         };
 
         let stoichiometry_matrix = Matrix {
-            matrix: Vec::<u32>::new(),
+            matrix: vec![0; 1],
             buffer: None,
             buf_size: None,
-            num_rows: 0,
-            num_columns: 0
+            num_rows: 1,
+            num_columns: 1
         };
 
         let reactions_idx = Matrix {
-            matrix: Vec::<u32>::new(),
+            matrix: vec![0; 3],
             buffer: None,
             buf_size: None,
-            num_rows: 0,
-            num_columns: 0
+            num_rows: 1,
+            num_columns: 1
         };
+        let reaction_rates = Vec::<f32>::new();
 
         let bind_groups = Vec::<wgpu::BindGroup>::new();
 
@@ -116,6 +126,7 @@ impl Simulation {
             diffusion_matrix,
             stoichiometry_matrix,
             reactions_idx,
+            reaction_rates,
             texture_compute_pipeline: None
         }
         
@@ -278,12 +289,45 @@ impl Simulation {
         // TODO
     }
 
-    pub fn add_reaction() {
+    pub fn add_reaction(&mut self, reactants: Vec<&str>, products: Vec<&str>, k: f32) {
         // Add a reaction to the simulation. It is independent of the region since particles are defined per region.
         // Steps:
         // 1. Add row to stoichiometry matrix. This row has values 
         // 2. Add row to index matrix
 
+        // Maybe the following can be made two map iters
+        let mut reactants_idx = Vec::<usize>::new();
+        for reactant in reactants {
+            match self.lattices[0].find_particle(reactant) {
+                Some(idx) => reactants_idx.push(idx),
+                None => panic!("Reactant {} not found", reactant)
+            };
+        }
+        let mut products_idx = Vec::<usize>::new();
+        for product in products {
+            match self.lattices[0].find_particle(product) {
+                Some(idx) => products_idx.push(idx),
+                None => panic!("Product {} not found", product)
+            };
+        }
+
+        // Update stoichiometry matrix
+        let mut stoichiometry_matrix_row = vec![0; self.stoichiometry_matrix.num_columns as usize];
+        for reactant_idx in &reactants_idx {
+            stoichiometry_matrix_row[*reactant_idx] -= 1;
+        }
+        for product_idx in products_idx {
+            stoichiometry_matrix_row[product_idx] += 1;
+        }
+        self.stoichiometry_matrix.add_row(stoichiometry_matrix_row);
+
+        // Update index matrix
+        reactants_idx.extend(std::iter::repeat(0 as usize).take(3 - reactants_idx.len()));
+        let reactants_idx_u32 = reactants_idx.iter().map(|x| *x as u32).collect::<Vec<u32>>();
+        self.reactions_idx.add_row(reactants_idx_u32);
+
+        // Update reaction rates vector
+        self.reaction_rates.push(k);
     }
 
     fn matrix_to_matrix(mtx: &Vec<f32>, new_mtx: &mut Vec<f32>, prev_rowcol: usize, new_rowcol: usize, third_dim: usize) {
