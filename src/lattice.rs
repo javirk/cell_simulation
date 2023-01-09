@@ -130,9 +130,9 @@ impl Lattice {
     }
 
     pub fn find_particle(&self, name: &str) -> Option<usize> {
-        for i in 0..self.particle_names.len() as usize {
+        for i in 1..self.particle_names.len() as usize {  // Particle 0 is void
             if &self.particle_names[i] == name {
-                return Some(i + 1);  // Particle 0 is void
+                return Some(i);
             }
         }
         None

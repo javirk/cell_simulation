@@ -21,9 +21,9 @@ pub struct Simulation {
     pub lattice_params: LatticeParams,
     regions: Regions,
     diffusion_matrix: Matrix<f32>,
-    stoichiometry_matrix: Matrix<u32>,
+    stoichiometry_matrix: Matrix<i32>,
     reactions_idx: Matrix<u32>,
-    reaction_rates: Vec<f32>,
+    reaction_rates: Matrix<f32>,
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
 
@@ -58,6 +58,17 @@ impl<T> Matrix<T> where T: bytemuck::Pod + bytemuck::Zeroable {  // Not sure abo
         assert!(row.len() == self.num_columns as usize);
         self.matrix.extend(row);
         self.num_rows += 1;
+    }
+
+    fn matrix_to_matrix(&mut self, new_mtx: &mut Vec<T>, prev_rowcol: usize, new_rowcol: usize, third_dim: usize) {
+        // Copies the matrix in self to a new matrix with a different size.
+        for i in 0..prev_rowcol {
+            for j in 0..prev_rowcol {
+                for k in 0..third_dim {
+                    new_mtx[i + j * new_rowcol + k * new_rowcol * new_rowcol] = self.matrix[i + j * prev_rowcol + k * prev_rowcol * prev_rowcol];
+                }
+            }
+        }
     }
 }
 
@@ -110,9 +121,15 @@ impl Simulation {
             buffer: None,
             buf_size: None,
             num_rows: 1,
+            num_columns: 3
+        };
+        let reaction_rates = Matrix {
+            matrix: vec![0.; 1],
+            buffer: None,
+            buf_size: None,
+            num_rows: 1,
             num_columns: 1
         };
-        let reaction_rates = Vec::<f32>::new();
 
         let bind_groups = Vec::<wgpu::BindGroup>::new();
 
@@ -142,6 +159,9 @@ impl Simulation {
             .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], command_encoder, &self.lattice_params.lattice_params);
 
         // cme step
+        self.cme.as_ref()
+            .expect("CME must be initialized first")
+            .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
 
         // Fill the texture
         self.texture_pass(frame_num, command_encoder);
@@ -186,6 +206,10 @@ impl Simulation {
         // RDME
         let rdme = RDME::new(&bind_group_layouts, &device);
         self.rdme = Some(rdme);
+
+        // CME
+        let cme = CME::new(&bind_group_layouts, &device);
+        self.cme = Some(cme);
 
         // Texture compute pipeline
         let texture_compute_pipeline = self.build_texture_compute_pipeline(&bind_group_layouts, device);
@@ -244,7 +268,7 @@ impl Simulation {
 
         let mut new_diffusion = vec![default_transition_rate; num_new_regions * num_new_regions * num_particles];
 
-        Simulation::matrix_to_matrix(&self.diffusion_matrix.matrix, &mut new_diffusion, num_regions, num_new_regions, num_particles);
+        self.diffusion_matrix.matrix_to_matrix(&mut new_diffusion, num_regions, num_new_regions, num_particles);
 
         // Modify the last element of the added matrix. It's the diffusion rate of the particles in the region
         for i_part in 0..num_particles {
@@ -277,6 +301,7 @@ impl Simulation {
 
         // Add one column to stoichiometry matrix.
         self.stoichiometry_matrix.add_uniform_column(0);
+        println!("New stoichiometry matrix: {:?}", self.stoichiometry_matrix.matrix);
     }
 
 
@@ -310,6 +335,7 @@ impl Simulation {
                 None => panic!("Product {} not found", product)
             };
         }
+        println!("Reactants: {:?}, products: {:?}", reactants_idx, products_idx);
 
         // Update stoichiometry matrix
         let mut stoichiometry_matrix_row = vec![0; self.stoichiometry_matrix.num_columns as usize];
@@ -320,24 +346,18 @@ impl Simulation {
             stoichiometry_matrix_row[product_idx] += 1;
         }
         self.stoichiometry_matrix.add_row(stoichiometry_matrix_row);
+        println!("New stoichiometry matrix: {:?} with {} rows and {} columns", self.stoichiometry_matrix.matrix, self.stoichiometry_matrix.num_rows, self.stoichiometry_matrix.num_columns);
 
         // Update index matrix
         reactants_idx.extend(std::iter::repeat(0 as usize).take(3 - reactants_idx.len()));
         let reactants_idx_u32 = reactants_idx.iter().map(|x| *x as u32).collect::<Vec<u32>>();
+        println!("Reactants idx : {:?}", reactants_idx_u32);
         self.reactions_idx.add_row(reactants_idx_u32);
+        println!("New reactions index matrix: {:?}", self.reactions_idx.matrix);
 
         // Update reaction rates vector
-        self.reaction_rates.push(k);
-    }
-
-    fn matrix_to_matrix(mtx: &Vec<f32>, new_mtx: &mut Vec<f32>, prev_rowcol: usize, new_rowcol: usize, third_dim: usize) {
-        for i in 0..prev_rowcol {
-            for j in 0..prev_rowcol {
-                for k in 0..third_dim {
-                    new_mtx[i + j * new_rowcol + k * new_rowcol * new_rowcol] = mtx[i + j * prev_rowcol + k * prev_rowcol * prev_rowcol];
-                }
-            }
-        }
+        self.reaction_rates.add_row(vec![k]);
+        println!("New reaction rates vector: {:?}", self.reaction_rates.matrix);
     }
 }
 
@@ -397,6 +417,7 @@ impl Simulation {
             }
         );
 
+        // Lattice and RDME bind group layouts
         let lattice_bind_group_layout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -451,7 +472,45 @@ impl Simulation {
                 label: None
             }
         );
-        vec![data_bind_group_layout, lattice_bind_group_layout]
+
+        let reactions_bind_group_layout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: self.stoichiometry_matrix.buf_size,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: self.reactions_idx.buf_size,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: self.reaction_rates.buf_size,
+                        },
+                        count: None,
+                    },
+                ],
+                label: None
+            }
+        );
+        vec![data_bind_group_layout, lattice_bind_group_layout, reactions_bind_group_layout]
     }
 
     fn build_bind_groups(
@@ -463,6 +522,7 @@ impl Simulation {
     ) -> Vec::<wgpu::BindGroup> {
         let data_bind_group_layout = &bind_group_layouts[0];
         let lattice_bind_group_layout = &bind_group_layouts[1];
+        let reactions_bind_group_layout = &bind_group_layouts[2];
 
         let mut bind_groups = Vec::<wgpu::BindGroup>::new();
         bind_groups.push(
@@ -518,6 +578,28 @@ impl Simulation {
                 label: Some("Lattice bind group"),
             }));
         }
+
+        bind_groups.push(
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: reactions_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.stoichiometry_matrix.buffer.as_ref().expect("").as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.reactions_idx.buffer.as_ref().expect("").as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.reaction_rates.buffer.as_ref().expect("").as_entire_binding(),
+                    },
+                ],
+                label: Some("Reactions bind group"),
+            })
+        );
+
         return bind_groups;
 
     }

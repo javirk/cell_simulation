@@ -27,7 +27,7 @@ impl CME {
 
         let compute_pipeline = device.create_compute_pipeline(
             &wgpu::ComputePipelineDescriptor {
-                label: Some("RDME Compute pipeline"),
+                label: Some("CME Compute pipeline"),
                 layout: Some(&compute_pipeline_layout),
                 module: &compute_shader,
                 entry_point: "CME",
@@ -44,6 +44,7 @@ impl CME {
     pub fn step(
         &self,
         data_bind_group: &wgpu::BindGroup,
+        lattice_bind_group: &wgpu::BindGroup,
         simulation_bind_group: &wgpu::BindGroup,
         command_encoder: &mut wgpu::CommandEncoder,
         params: &Params,
@@ -64,7 +65,8 @@ impl CME {
             let mut cpass = command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, data_bind_group, &[]);
-            cpass.set_bind_group(1, simulation_bind_group, &[]);
+            cpass.set_bind_group(1, lattice_bind_group, &[]);
+            cpass.set_bind_group(2, simulation_bind_group, &[]);
             cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
         }        
     }

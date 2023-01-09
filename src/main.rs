@@ -86,6 +86,9 @@ impl framework::Framework for CellSimulation {
         simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14);
         // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
         simulation.add_particle("p1", "one", 200);
+        simulation.add_particle("p2", "one", 100);
+
+        simulation.add_reaction(vec!["p1"], vec!["p2"], 1.);
 
         simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
         
