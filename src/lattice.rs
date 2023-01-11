@@ -67,6 +67,7 @@ impl Lattice {
     pub fn init_random_particles(&mut self, particle: Particle, num_particles: u32, starting_region: &Vec<f32>, ending_region: &Vec<f32>) {       
         // The following fills a cube with the particles
         // TODO: I should add an assert to make sure num_particles is smaller than the volume of the region (particles fit in the region)
+        // THERE IS A BIG BUG HERE. PARTICLES GET OVERWRITTEN
 
         let dimensions = self.lattice_params.dimensions();
         let mut rng = rand::thread_rng();

@@ -30,7 +30,7 @@ impl CME {
                 label: Some("CME Compute pipeline"),
                 layout: Some(&compute_pipeline_layout),
                 module: &compute_shader,
-                entry_point: "CME",
+                entry_point: "cme",
             }
         );
 

@@ -46,6 +46,19 @@ fn vs_main(
     return out;
 }
 
+fn particle_to_color(val: u32) -> vec3<f32> {
+    switch (val) {
+        case 1u: { return vec3<f32>(219., 95., 87.) / 255.; }
+        case 2u: { return vec3<f32>(219., 194., 87.) / 255.; }
+        case 3u: { return vec3<f32>(145., 219., 87.) / 255.; }
+        case 4u: { return vec3<f32>(87., 219., 128.) / 255.; }
+        case 5u: { return vec3<f32>(87., 211., 219.) / 255.; }
+        case 6u: { return vec3<f32>(87., 112., 219.) / 255.; }
+        case 7u: { return vec3<f32>(219., 87., 178.) / 255.; }
+        default: { return vec3<f32>(0., 0., 0.); }
+    }
+}
+
 @group(0) @binding(0) var texture: texture_storage_3d<r32float, read>;
 @group(0) @binding(1) var<uniform> params: LatticeParams;
 @group(0) @binding(2) var<uniform> unif: Uniforms;
@@ -58,7 +71,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         i32(in.tex_coord[1]),
         i32(in.tex_coord[2]),
     );
-    var color = textureLoad(texture, loadCoord).x;
-    return vec4<f32>(color, 0., 0., 1.0);
+    var number = textureLoad(texture, loadCoord).x;
+    var color = particle_to_color(u32(number));
+    return vec4<f32>(color, 1.0);
     // TODO: Add borders with the region information.
 }

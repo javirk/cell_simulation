@@ -36,14 +36,14 @@ struct Matrix<T> {
 }
 
 impl<T> Matrix<T> where T: bytemuck::Pod + bytemuck::Zeroable {  // Not sure about this
-    pub fn add_buffer(&mut self, device: &wgpu::Device, buffer_size: usize, label: Option<&str>) {
-        
+    pub fn add_buffer(&mut self, device: &wgpu::Device, label: Option<&str>) {
+        let buf_size = self.matrix.len() * std::mem::size_of::<T>();
         self.buffer = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: label,
             contents: bytemuck::cast_slice(&self.matrix),
             usage: wgpu::BufferUsages::STORAGE,
         }));
-        self.buf_size = wgpu::BufferSize::new(buffer_size as _,);
+        self.buf_size = wgpu::BufferSize::new(buf_size as _,);
     }
 
     pub fn add_uniform_column(&mut self, value: T) {
@@ -159,9 +159,9 @@ impl Simulation {
             .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], command_encoder, &self.lattice_params.lattice_params);
 
         // cme step
-        self.cme.as_ref()
-            .expect("CME must be initialized first")
-            .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
+        // self.cme.as_ref()
+        //     .expect("CME must be initialized first")
+        //     .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
 
         // Fill the texture
         self.texture_pass(frame_num, command_encoder);
@@ -180,8 +180,8 @@ impl Simulation {
         self.lattices[1].start_buffers(device);
         
         // Diffusion matrix
-        let diff_buffer_size = self.diffusion_matrix.matrix.len() * std::mem::size_of::<f32>();
-        self.diffusion_matrix.add_buffer(device, diff_buffer_size, Some("Diffusion matrix buffer"));
+        //let diff_buffer_size = self.diffusion_matrix.matrix.len() * std::mem::size_of::<f32>();
+        self.diffusion_matrix.add_buffer(device, Some("Diffusion matrix buffer"));
 
         // Regions
         let regions_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -194,12 +194,15 @@ impl Simulation {
         self.lattice_params.create_buffer(device);
         
         // Stoichiometry matrix
-        let stoich_buffer_size = self.stoichiometry_matrix.matrix.len() * std::mem::size_of::<u32>();
-        self.stoichiometry_matrix.add_buffer(device, stoich_buffer_size, Some("Stoichiometry matrix buffer"));
+        //let stoich_buffer_size = self.stoichiometry_matrix.matrix.len() * std::mem::size_of::<u32>();
+        self.stoichiometry_matrix.add_buffer(device, Some("Stoichiometry matrix buffer"));
 
         // Reactions idx
-        let reactions_idx_buffer_size = self.reactions_idx.matrix.len() * std::mem::size_of::<u32>();
-        self.reactions_idx.add_buffer(device, reactions_idx_buffer_size, Some("Reactions idx buffer"));
+        //let reactions_idx_buffer_size = self.reactions_idx.matrix.len() * std::mem::size_of::<u32>();
+        self.reactions_idx.add_buffer(device, Some("Reactions idx buffer"));
+
+        // Reaction rates
+        self.reaction_rates.add_buffer(device, Some("Reaction rates buffer"));
 
         let bind_group_layouts = self.build_bind_group_layouts(uniform_buffer, texture, device);
 
@@ -291,6 +294,7 @@ impl Simulation {
         let ending_region = &self.regions.positions[region_idx][1];
 
         self.lattices[0].init_random_particles(particle_idx, count, &starting_region, &ending_region);
+        println!("Particle {} added. New lattice: {:?}", name, self.lattices[0].lattice);
 
         // Update the diffusion matrix now
         let num_regions = self.regions.names.len();  // Regions
