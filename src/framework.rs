@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::time::Instant;
 use imgui::*;
-use imgui_wgpu::{Renderer, RendererConfig, Texture, TextureConfig};
+use imgui_wgpu::{Renderer, RendererConfig};
 use winit::{
     event::{self, Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, MouseScrollDelta},
     event_loop::{ControlFlow, EventLoop, },

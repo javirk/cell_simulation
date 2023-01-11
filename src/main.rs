@@ -1,4 +1,4 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{time::{SystemTime, UNIX_EPOCH}, env};
 use lattice_params::LatticeParams;
 use simulation::Simulation;
 
@@ -77,10 +77,10 @@ impl framework::Framework for CellSimulation {
         ];
         
         let render_params = RenderParams::new(device, &render_param_data);
-        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![2, 2, 1], device);
+        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![2, 2, 1]);
         let texture = Texture::new(&simulation_params.lattice_params, &device);
         
-        let mut simulation = Simulation::new(simulation_params, device);
+        let mut simulation = Simulation::new(simulation_params);
         let renderer = Renderer::new(&uniform_buffer, &texture, &simulation.lattice_params.lattice_params, &render_params, config, device);
 
         simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14);

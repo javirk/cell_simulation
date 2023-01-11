@@ -33,7 +33,6 @@ pub struct LatticeParams {
 impl LatticeParams {
     pub fn new(
         dimensions: Vec<f32>, resolution: Vec<usize>,
-        device: &wgpu::Device,
     ) -> Self {
         let lattice_params = Params {
             x: dimensions[0],
@@ -62,14 +61,6 @@ impl LatticeParams {
         }));
     }
 
-    pub fn size(&self) -> usize {
-        mem::size_of::<Params>()
-    }
-
-    pub fn buffer_size(&self) -> Option<wgpu::BufferSize> {
-        wgpu::BufferSize::new(self.size() as _, )
-    }
-
     pub fn dimensions(&self) -> usize {
         (self.lattice_params.x_res * self.lattice_params.y_res * self.lattice_params.z_res) as usize
     }
@@ -82,7 +73,7 @@ impl LatticeParams {
         wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false,
-            min_binding_size: wgpu::BufferSize::new(mem::size_of::<LatticeParams>() as _),
+            min_binding_size: wgpu::BufferSize::new(mem::size_of::<Params>() as _),
         }
     }
 }

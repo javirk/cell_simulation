@@ -22,7 +22,6 @@ pub struct Lattice {
 impl Lattice {
     pub fn new(
         params: &Params,
-        device: &wgpu::Device,
     ) -> Self {
         let dimensions = params.dimensions();
         let lattice_buff_size = dimensions * MAX_PARTICLES_SITE * mem::size_of::<Particle>();
@@ -72,8 +71,8 @@ impl Lattice {
         let dimensions = self.lattice_params.dimensions();
         let mut rng = rand::thread_rng();
 
-        let mut lattice: Vec<Particle> = vec![0 as Particle; dimensions * MAX_PARTICLES_SITE];
-        let mut occupancy: Vec<u32> = vec![0 as u32; dimensions];
+        //let mut lattice: Vec<Particle> = vec![0 as Particle; dimensions * MAX_PARTICLES_SITE];
+        //let mut occupancy: Vec<u32> = vec![0 as u32; dimensions];
 
         for _ in 0..num_particles {
             let mut arr = [0f32; 3];
@@ -84,20 +83,20 @@ impl Lattice {
                 for i in 0..3 {
                     arr[i] = starting_region[i] + (ending_region[i] - starting_region[i]) * arr[i];
                 }
-                match self.add_particle_site(&mut lattice, &mut occupancy, arr[0], arr[1], arr[2], particle) {
+                match self.add_particle_site(arr[0], arr[1], arr[2], particle) {
                     Ok(_) => break,
                     Err(_) => continue,
                 }
             }
         }
 
-        self.lattice = lattice;
-        self.occupancy = occupancy;
+        //self.lattice = lattice;
+        //self.occupancy = occupancy;
         // println!("Lattice: {:?}", self.lattice);
     }
 
 
-    fn add_particle_site(&self, lattice: &mut Vec<Particle>, occupancy: &mut Vec<u32>, x: f32, y: f32, z: f32, particle: Particle) -> Result<String, String> {
+    fn add_particle_site(&mut self, x: f32, y: f32, z: f32, particle: Particle) -> Result<String, String> {
         let res = (self.lattice_params.x_res as usize, self.lattice_params.y_res as usize, self.lattice_params.z_res as usize);
 
         let x_lattice = (x * res.0 as f32) as usize;  // "as usize" already floors the number, so ok.
@@ -106,11 +105,11 @@ impl Lattice {
 
         // Starting point of the cell
         let (occ_index, lattice_index) = self.get_last_element_site_coords(res, x_lattice, y_lattice, z_lattice);
-        if occupancy[occ_index] == MAX_PARTICLES_SITE as u32 {
+        if self.occupancy[occ_index] == MAX_PARTICLES_SITE as u32 {
             return Err(String::from("Lattice site is full"));
         }
-        lattice[lattice_index + occupancy[occ_index] as usize] = particle;
-        occupancy[occ_index] += 1;
+        self.lattice[lattice_index + self.occupancy[occ_index] as usize] = particle;
+        self.occupancy[occ_index] += 1;
         Ok(String::from("Particle added"))
     }
 
@@ -130,6 +129,7 @@ impl Lattice {
         self.lattice_buff.as_ref().expect("").as_entire_binding()
     }
 
+    #[allow(dead_code)]
     pub fn find_particle(&self, name: &str) -> Option<usize> {
         for i in 1..self.particle_names.len() as usize {  // Particle 0 is void
             if &self.particle_names[i] == name {

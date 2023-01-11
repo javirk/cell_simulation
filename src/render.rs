@@ -160,7 +160,7 @@ impl Renderer {
         // This creates the instances. All the math is for the translation vector. TODO: Add margins.
         let lattice_res_f32 = [lattice_params.x_res.clone() as f32, lattice_params.y_res.clone() as f32, lattice_params.z_res.clone() as f32];
         let (width, height) = (render_params.params.width as f32, render_params.params.height as f32);
-        let mut l = 0.;
+        let l: f32;
         if (width / (lattice_params.x * lattice_res_f32[0])) <= (height / (lattice_params.y * lattice_res_f32[1])) {
             // X is the limiting dimension  
             l = width / lattice_res_f32[0];

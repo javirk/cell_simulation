@@ -1,5 +1,3 @@
-use std::iter::Product;
-
 use wgpu::{util::DeviceExt};
 use crate::{
     rdme::RDME, 
@@ -83,12 +81,11 @@ struct Regions {
 impl Simulation {
     pub fn new(
         lattice_params: LatticeParams,
-        device: &wgpu::Device,
     ) -> Self {
         // A simulation has a lattice first
         let mut lattices = Vec::<Lattice>::new();
         for _ in 0..2 {
-            lattices.push(Lattice::new(&lattice_params.lattice_params, device))
+            lattices.push(Lattice::new(&lattice_params.lattice_params))
         }
 
         let regions = Regions {
@@ -381,11 +378,7 @@ impl Simulation {
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer { 
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: self.lattice_params.buffer_size()
-                        },
+                        ty: self.lattice_params.binding_type(),
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
@@ -560,19 +553,19 @@ impl Simulation {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.lattices[i].lattice_buff.as_ref().expect("").as_entire_binding(),
+                        resource: self.lattices[i].binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.lattices[(i + 1) % 2].lattice_buff.as_ref().expect("").as_entire_binding(), // bind to opposite buffer
+                        resource: self.lattices[(i + 1) % 2].binding_resource(), // bind to opposite buffer
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: self.lattices[i].occupancy_buff.as_ref().expect("").as_entire_binding(),
+                        resource: self.lattices[i].binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: self.lattices[(i + 1) % 2].occupancy_buff.as_ref().expect("").as_entire_binding(),
+                        resource: self.lattices[(i + 1) % 2].binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,
