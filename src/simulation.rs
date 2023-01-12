@@ -7,7 +7,8 @@ use crate::{
     uniforms::UniformBuffer, types::{Region, Particle},
     WORKGROUP_SIZE,
     preprocessor::ShaderBuilder,
-    cme::CME
+    cme::CME,
+    reactions_params::ReactionParams,
 };
 
 pub struct Simulation {
@@ -22,6 +23,7 @@ pub struct Simulation {
     stoichiometry_matrix: Matrix<i32>,
     reactions_idx: Matrix<u32>,
     reaction_rates: Matrix<f32>,
+    reaction_params: Option<ReactionParams>,
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
 
@@ -141,6 +143,7 @@ impl Simulation {
             stoichiometry_matrix,
             reactions_idx,
             reaction_rates,
+            reaction_params: None,
             texture_compute_pipeline: None
         }
         
@@ -156,9 +159,9 @@ impl Simulation {
             .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], command_encoder, &self.lattice_params.lattice_params);
 
         // cme step
-        // self.cme.as_ref()
-        //     .expect("CME must be initialized first")
-        //     .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
+        self.cme.as_ref()
+            .expect("CME must be initialized first")
+            .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
 
         // Fill the texture
         self.texture_pass(frame_num, command_encoder);
@@ -210,6 +213,10 @@ impl Simulation {
         // CME
         let cme = CME::new(&bind_group_layouts, &device);
         self.cme = Some(cme);
+
+        // Reaction parameters
+        let reaction_params = ReactionParams::new(self.stoichiometry_matrix.num_columns, self.stoichiometry_matrix.num_rows, device);
+        self.reaction_params = Some(reaction_params);
 
         // Texture compute pipeline
         let texture_compute_pipeline = self.build_texture_compute_pipeline(&bind_group_layouts, device);
@@ -291,7 +298,7 @@ impl Simulation {
         let ending_region = &self.regions.positions[region_idx][1];
 
         self.lattices[0].init_random_particles(particle_idx, count, &starting_region, &ending_region);
-        println!("Particle {} added. New lattice: {:?}", name, self.lattices[0].lattice);
+        //println!("Particle {} added. New lattice: {:?}", name, self.lattices[0].lattice);
 
         // Update the diffusion matrix now
         let num_regions = self.regions.names.len();  // Regions
@@ -384,12 +391,18 @@ impl Simulation {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: self.reaction_params.as_ref().expect("").binding_type(),
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
                         ty: uniform_buffer.binding_type(),
                         count: None,
                     },
                     // Region data
                     wgpu::BindGroupLayoutEntry {
-                        binding: 2,
+                        binding: 3,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -400,7 +413,7 @@ impl Simulation {
                     },
                     // Diffusion matrix
                     wgpu::BindGroupLayoutEntry {
-                        binding: 3,
+                        binding: 4,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -532,14 +545,18 @@ impl Simulation {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: uniform_buffer.binding_resource(),
+                        resource: self.reaction_params.as_ref().expect("").binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: self.regions.buffer.as_ref().expect("").as_entire_binding(),
+                        resource: uniform_buffer.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
+                        resource: self.regions.buffer.as_ref().expect("").as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
                         resource: self.diffusion_matrix.buffer.as_ref().expect("").as_entire_binding(),
                     },
                 ],
@@ -553,19 +570,19 @@ impl Simulation {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.lattices[i].binding_resource(),
+                        resource: self.lattices[i].lattice_binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.lattices[(i + 1) % 2].binding_resource(), // bind to opposite buffer
+                        resource: self.lattices[(i + 1) % 2].lattice_binding_resource(), // bind to opposite buffer
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: self.lattices[i].binding_resource(),
+                        resource: self.lattices[i].occupancy_binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: self.lattices[(i + 1) % 2].binding_resource(),
+                        resource: self.lattices[(i + 1) % 2].occupancy_binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,

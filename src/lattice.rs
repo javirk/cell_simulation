@@ -66,9 +66,7 @@ impl Lattice {
     pub fn init_random_particles(&mut self, particle: Particle, num_particles: u32, starting_region: &Vec<f32>, ending_region: &Vec<f32>) {       
         // The following fills a cube with the particles
         // TODO: I should add an assert to make sure num_particles is smaller than the volume of the region (particles fit in the region)
-        // THERE IS A BIG BUG HERE. PARTICLES GET OVERWRITTEN
 
-        let dimensions = self.lattice_params.dimensions();
         let mut rng = rand::thread_rng();
 
         //let mut lattice: Vec<Particle> = vec![0 as Particle; dimensions * MAX_PARTICLES_SITE];
@@ -92,7 +90,7 @@ impl Lattice {
 
         //self.lattice = lattice;
         //self.occupancy = occupancy;
-        // println!("Lattice: {:?}", self.lattice);
+        println!("Occupancy: {:?}", self.occupancy);
     }
 
 
@@ -119,14 +117,12 @@ impl Lattice {
         (occ_index, index)
     }
 
-    fn get_last_element_site_idx(&self, lattice: &Vec<Particle>, index: usize) -> usize {
-        let last_element = index + lattice[index + MAX_PARTICLES_SITE + 1] as usize;
-        assert!(lattice[index + MAX_PARTICLES_SITE + 1] < MAX_PARTICLES_SITE as u32, "Lattice is full at site {}", index);
-        last_element
+    pub fn lattice_binding_resource(&self) -> wgpu::BindingResource {
+        self.lattice_buff.as_ref().expect("").as_entire_binding()
     }
 
-    pub fn binding_resource(&self) -> wgpu::BindingResource {
-        self.lattice_buff.as_ref().expect("").as_entire_binding()
+    pub fn occupancy_binding_resource(&self) -> wgpu::BindingResource {
+        self.occupancy_buff.as_ref().expect("").as_entire_binding()
     }
 
     #[allow(dead_code)]

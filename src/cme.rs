@@ -12,6 +12,7 @@ impl CME {
     ) -> Self {
         let data_bind_group_layout = &bind_group_layouts[0];
         let lattice_bind_group_layout = &bind_group_layouts[1];
+        let reaction_bind_group_layout = &bind_group_layouts[2];
 
         let binding = ShaderBuilder::new("cme.wgsl").unwrap();
         let shader_builder = binding.build();
@@ -20,7 +21,7 @@ impl CME {
         let compute_pipeline_layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("CME compute"),
-                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout],
+                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout, reaction_bind_group_layout],
                 push_constant_ranges: &[],
             }
         );

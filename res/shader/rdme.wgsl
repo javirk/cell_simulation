@@ -12,9 +12,9 @@ struct Lattice {
 
 
 @group(0) @binding(0) var<uniform> params: LatticeParams;
-@group(0) @binding(1) var<uniform> unif: Uniforms;
-@group(0) @binding(2) var<storage> regions: array<u32>;
-@group(0) @binding(3) var<storage> diffusion_matrix: array<f32>;
+@group(0) @binding(2) var<uniform> unif: Uniforms;
+@group(0) @binding(3) var<storage> regions: array<u32>;
+@group(0) @binding(4) var<storage> diffusion_matrix: array<f32>;
 
 @group(1) @binding(0) var<storage> latticeSrc: Lattice;
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
@@ -201,11 +201,6 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         while (rand_number > p[i]) {
             i += 1;
         }
-        // if (rand_number < 0.5) {
-        //     i = 0;
-        // } else {
-        //     i = 1;
-        // }
                         
         let val = move_particle(latticeSrc.lattice[i_part], i, global_id, i_part);
     }

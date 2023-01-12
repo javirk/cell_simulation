@@ -17,6 +17,7 @@ mod render_params;
 mod preprocessor;
 mod uniforms;
 mod cme;
+mod reactions_params;
 
 use crate::{
     render_params::RenderParams,
@@ -77,7 +78,7 @@ impl framework::Framework for CellSimulation {
         ];
         
         let render_params = RenderParams::new(device, &render_param_data);
-        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![2, 2, 1]);
+        let simulation_params = LatticeParams::new(vec![1., 1., 1.,], vec![64, 64, 1]);
         let texture = Texture::new(&simulation_params.lattice_params, &device);
         
         let mut simulation = Simulation::new(simulation_params);
@@ -85,8 +86,8 @@ impl framework::Framework for CellSimulation {
 
         simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14);
         // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
-        simulation.add_particle("p1", "one", 2);
-        simulation.add_particle("p2", "one", 2);
+        simulation.add_particle("p1", "one", 200);
+        simulation.add_particle("p2", "one", 200);
 
         //simulation.add_reaction(vec!["p1"], vec!["p2"], 1.);
 
