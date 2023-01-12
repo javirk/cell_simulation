@@ -490,9 +490,9 @@ impl Simulation {
                         binding: 0,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer { 
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: self.stoichiometry_matrix.buf_size,
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].concentrations_buff_size as _),
                         },
                         count: None,
                     },
@@ -502,12 +502,22 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: self.reactions_idx.buf_size,
+                            min_binding_size: self.stoichiometry_matrix.buf_size,
                         },
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: self.reactions_idx.buf_size,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -599,14 +609,18 @@ impl Simulation {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.stoichiometry_matrix.buffer.as_ref().expect("").as_entire_binding(),
+                        resource: self.lattices[0].concentrations_binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.reactions_idx.buffer.as_ref().expect("").as_entire_binding(),
+                        resource: self.stoichiometry_matrix.buffer.as_ref().expect("").as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
+                        resource: self.reactions_idx.buffer.as_ref().expect("").as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
                         resource: self.reaction_rates.buffer.as_ref().expect("").as_entire_binding(),
                     },
                 ],

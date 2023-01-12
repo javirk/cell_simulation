@@ -13,10 +13,13 @@ pub struct Lattice {
     pub lattice_buff_size: usize,
     pub occupancy_buff: Option<wgpu::Buffer>,
     pub occupancy_buff_size: usize,
+    pub concentrations_buff: Option<wgpu::Buffer>,
+    pub concentrations_buff_size: usize,
     lattice_params: Params,
     pub lattice: Vec<Particle>,
     pub particle_names: Vec<String>,
     pub occupancy: Vec<u32>,
+    pub concentrations: Vec<u32>,
 }
 
 impl Lattice {
@@ -26,20 +29,25 @@ impl Lattice {
         let dimensions = params.dimensions();
         let lattice_buff_size = dimensions * MAX_PARTICLES_SITE * mem::size_of::<Particle>();
         let occupancy_buff_size = dimensions * mem::size_of::<u32>();
+        let concentrations_buff_size = dimensions * mem::size_of::<u32>();  // This changes overtime!
 
         let lattice: Vec<Particle> = vec![0 as Particle; dimensions * MAX_PARTICLES_SITE];
         let particle_names: Vec<String> = vec![String::from("void")];
         let occupancy: Vec<u32> = vec![0 as u32; dimensions];
+        let concentrations: Vec<u32> = vec![0 as Particle; dimensions];
 
         Lattice { 
             lattice_buff: None,
             lattice_buff_size,
             occupancy_buff: None,
             occupancy_buff_size,
+            concentrations_buff: None,
+            concentrations_buff_size,
             lattice_params: *params,
             lattice,
             particle_names,
             occupancy,
+            concentrations
         }
     }
 
@@ -59,8 +67,17 @@ impl Lattice {
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         });
+
+        let concentrations_buff = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Concentrations Buffer"),
+            contents: bytemuck::cast_slice(&self.concentrations),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+        });
         self.lattice_buff = Some(lattice_buff);
         self.occupancy_buff = Some(occupancy_buff);
+        self.concentrations_buff = Some(concentrations_buff);
     }
 
     pub fn init_random_particles(&mut self, particle: Particle, num_particles: u32, starting_region: &Vec<f32>, ending_region: &Vec<f32>) {       
@@ -87,6 +104,7 @@ impl Lattice {
                 }
             }
         }
+        // TODO: Update concentrations
 
         //self.lattice = lattice;
         //self.occupancy = occupancy;
@@ -111,6 +129,14 @@ impl Lattice {
         Ok(String::from("Particle added"))
     }
 
+    fn add_particle_concentration(&mut self, x: f32, y: f32, z: f32, particle: Particle) {
+        let current_num_particles = self.concentrations.len() / self.lattice_params.dimensions();
+        if particle > current_num_particles as u32 {
+            // Not ok, I must take the previous number into account
+            self.concentrations.resize(self.lattice_params.dimensions() * (particle + 1) as usize, 0);
+        }
+    }
+
     fn get_last_element_site_coords(&self, resolution: (usize, usize, usize), x: usize, y: usize, z: usize) -> (usize, usize) {
         let occ_index = x + y * resolution.0 + z * resolution.0 * resolution.1;
         let index = occ_index * MAX_PARTICLES_SITE;
@@ -123,6 +149,10 @@ impl Lattice {
 
     pub fn occupancy_binding_resource(&self) -> wgpu::BindingResource {
         self.occupancy_buff.as_ref().expect("").as_entire_binding()
+    }
+
+    pub fn concentrations_binding_resource(&self) -> wgpu::BindingResource {
+        self.concentrations_buff.as_ref().expect("").as_entire_binding()
     }
 
     #[allow(dead_code)]

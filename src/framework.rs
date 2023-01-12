@@ -332,7 +332,10 @@ fn start<F: Framework>(
                         .build(|| {
                             ui.text(format!("FPS: {:.1}", fps));
                             ui.text(format!("Slice: {}", slice_wheel));
-                            
+                            // TODO: Add concentration plot and a way to choose the species
+                            ui.plot_lines("A plot", &[0.0, 0.6, 0.5, 0.4, 0.7, 0.4, 0.5, 0.6, 0.0])
+                                .graph_size([200.0, 80.0])
+                                .build();
                         });
                     
                     //ui.show_metrics_window(&mut true);
