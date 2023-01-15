@@ -19,6 +19,7 @@ imgui = "0.9"
 imgui-winit-support = { version = "0.9"  }
 imgui-wgpu = "0.21.0"
 cgmath = "0.18"
+tensor-wgpu =  { git = "https://github.com/javirk/tensor-wgpu", tag = "0.1.1"}
 
 [patch.crates-io]
 naga = { git = "https://github.com/gfx-rs/naga.git", rev = "e98bd9264c3a6b04dff15a6b1213c0c80201740a" }  # For atomicCompareExchangeWeak

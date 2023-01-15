@@ -26,7 +26,7 @@ struct ReactionParams {
 @group(2) @binding(0) var <storage, read_write> concentrations: array<f32>;
 @group(2) @binding(1) var <storage, read> stoichiometry: array<f32>;
 @group(2) @binding(2) var <storage, read> reactions_idx: array<i32>;
-@group(2) @binding(3) var <storage, read> reaction_rates: array<u32>;
+@group(2) @binding(3) var <storage, read> reaction_rates: array<f32>;
 // Have a writable concentrations vector as output. This will be used to populate the lattice later instead of the reordering.
 // Information can't be read from there unless I update it in RDME. That's ugly
 

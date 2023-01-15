@@ -27,51 +27,6 @@ pub struct Simulation {
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
 
-struct Matrix<T> {
-    matrix: Vec<T>,
-    buffer: Option<wgpu::Buffer>,
-    buf_size: Option<wgpu::BufferSize>,
-    num_rows: u32,
-    num_columns: u32,
-}
-
-impl<T> Matrix<T> where T: bytemuck::Pod + bytemuck::Zeroable {  // Not sure about this
-    pub fn add_buffer(&mut self, device: &wgpu::Device, label: Option<&str>) {
-        let buf_size = self.matrix.len() * std::mem::size_of::<T>();
-        self.buffer = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: label,
-            contents: bytemuck::cast_slice(&self.matrix),
-            usage: wgpu::BufferUsages::STORAGE,
-        }));
-        self.buf_size = wgpu::BufferSize::new(buf_size as _,);
-    }
-
-    pub fn add_uniform_column(&mut self, value: T) {
-        for i in 0..self.num_rows {
-            let index = (i + 1) * self.num_columns;
-            self.matrix.insert(index as usize, value);
-        }
-        self.num_columns += 1;
-    }
-
-    pub fn add_row(&mut self, row: Vec<T>) {
-        assert!(row.len() == self.num_columns as usize);
-        self.matrix.extend(row);
-        self.num_rows += 1;
-    }
-
-    fn matrix_to_matrix(&mut self, new_mtx: &mut Vec<T>, prev_rowcol: usize, new_rowcol: usize, third_dim: usize) {
-        // Copies the matrix in self to a new matrix with a different size.
-        for i in 0..prev_rowcol {
-            for j in 0..prev_rowcol {
-                for k in 0..third_dim {
-                    new_mtx[i + j * new_rowcol + k * new_rowcol * new_rowcol] = self.matrix[i + j * prev_rowcol + k * prev_rowcol * prev_rowcol];
-                }
-            }
-        }
-    }
-}
-
 struct Regions {
     regions: Vec<Region>, // --> Should maybe be a Matrix to have the buffer and the size together.
     positions: Vec<Vec<Vec<f32>>>,  // Starting corner, ending corner
@@ -204,6 +159,10 @@ impl Simulation {
         // Reaction rates
         self.reaction_rates.add_buffer(device, Some("Reaction rates buffer"));
 
+        // Reaction parameters
+        let reaction_params = ReactionParams::new(self.stoichiometry_matrix.num_columns, self.stoichiometry_matrix.num_rows, device);
+        self.reaction_params = Some(reaction_params);
+
         let bind_group_layouts = self.build_bind_group_layouts(uniform_buffer, texture, device);
 
         // RDME
@@ -213,10 +172,6 @@ impl Simulation {
         // CME
         let cme = CME::new(&bind_group_layouts, &device);
         self.cme = Some(cme);
-
-        // Reaction parameters
-        let reaction_params = ReactionParams::new(self.stoichiometry_matrix.num_columns, self.stoichiometry_matrix.num_rows, device);
-        self.reaction_params = Some(reaction_params);
 
         // Texture compute pipeline
         let texture_compute_pipeline = self.build_texture_compute_pipeline(&bind_group_layouts, device);

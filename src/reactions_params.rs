@@ -20,9 +20,7 @@ pub struct ReactionParams {
 }
 
 impl ReactionParams {
-    pub fn new(
-        num_species: u32, num_reactions: u32, device: &wgpu::Device
-    ) -> Self {
+    pub fn new(num_species: u32, num_reactions: u32, device: &wgpu::Device) -> Self {
         let reaction_params = Params {
             num_species,
             num_reactions

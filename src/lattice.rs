@@ -2,6 +2,7 @@ use wgpu::util::DeviceExt;
 use core::fmt;
 use std::mem;
 use rand::Rng;
+use tensor_wgpu::Tensor;
 
 use crate::MAX_PARTICLES_SITE;
 use crate::lattice_params::Params;
