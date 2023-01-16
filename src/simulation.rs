@@ -392,7 +392,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].lattice_buff_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].lattice.buf_size as _),
                         },
                         count: None,
                     },
@@ -402,7 +402,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].lattice_buff_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].lattice.buf_size as _),
                         },
                         count: None,
                     },
@@ -413,7 +413,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].occupancy_buff_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].occupancy.buf_size as _),
                         },
                         count: None,
                     },
@@ -423,7 +423,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].occupancy_buff_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].occupancy.buf_size as _),
                         },
                         count: None,
                     },
@@ -447,7 +447,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].concentrations_buff_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].concentrations.buf_size as _),
                         },
                         count: None,
                     },

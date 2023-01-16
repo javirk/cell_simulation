@@ -2,7 +2,8 @@ use wgpu::util::DeviceExt;
 use core::fmt;
 use std::mem;
 use rand::Rng;
-use tensor_wgpu::Tensor;
+use tensor_wgpu::{Tensor, Tensor3};
+use ndarray::prelude::*;
 
 use crate::MAX_PARTICLES_SITE;
 use crate::lattice_params::Params;
@@ -10,17 +11,20 @@ use crate::types::Particle;
 
 
 pub struct Lattice {
-    pub lattice_buff: Option<wgpu::Buffer>,
-    pub lattice_buff_size: usize,
-    pub occupancy_buff: Option<wgpu::Buffer>,
-    pub occupancy_buff_size: usize,
-    pub concentrations_buff: Option<wgpu::Buffer>,
-    pub concentrations_buff_size: usize,
+    // pub lattice: Vec<Particle>,
+    // pub lattice_buff: Option<wgpu::Buffer>,
+    // pub lattice_buff_size: usize,
+    pub lattice: Tensor<Particle, Ix4>,
+    // pub occupancy: Vec<u32>,
+    // pub occupancy_buff: Option<wgpu::Buffer>,
+    // pub occupancy_buff_size: usize,
+    pub occupancy: Tensor3<u32>,
+    // pub concentrations: Vec<u32>,
+    // pub concentrations_buff: Option<wgpu::Buffer>,
+    // pub concentrations_buff_size: usize,
+    pub concentrations: Tensor3<u32>,
     lattice_params: Params,
-    pub lattice: Vec<Particle>,
     pub particle_names: Vec<String>,
-    pub occupancy: Vec<u32>,
-    pub concentrations: Vec<u32>,
 }
 
 impl Lattice {
@@ -30,55 +34,31 @@ impl Lattice {
         let dimensions = params.dimensions();
         let lattice_buff_size = dimensions * MAX_PARTICLES_SITE * mem::size_of::<Particle>();
         let occupancy_buff_size = dimensions * mem::size_of::<u32>();
-        let concentrations_buff_size = dimensions * mem::size_of::<u32>();  // This changes overtime!
+        let concentrations_buff_size = dimensions * mem::size_of::<u32>();  // This changes over time!
 
         let lattice: Vec<Particle> = vec![0 as Particle; dimensions * MAX_PARTICLES_SITE];
         let particle_names: Vec<String> = vec![String::from("void")];
         let occupancy: Vec<u32> = vec![0 as u32; dimensions];
         let concentrations: Vec<u32> = vec![0 as Particle; dimensions];
 
-        Lattice { 
-            lattice_buff: None,
-            lattice_buff_size,
-            occupancy_buff: None,
-            occupancy_buff_size,
-            concentrations_buff: None,
-            concentrations_buff_size,
-            lattice_params: *params,
+        let lattice: Tensor<Particle, Ix4> = Tensor::<Particle, _>::zeros((params.x_res as usize, params.y_res as usize, params.z_res as usize, MAX_PARTICLES_SITE as usize).f());
+        let occupancy: Tensor3<u32> = Tensor3::<u32>::zeros((params.x_res as usize, params.y_res as usize, params.z_res as usize).f());
+        let concentrations: Tensor3<u32> = Tensor3::<u32>::zeros((params.x as usize, params.y as usize, params.z as usize).f());
+
+        Lattice {
             lattice,
-            particle_names,
             occupancy,
-            concentrations
+            concentrations,
+            lattice_params: *params,
+            particle_names
         }
     }
 
     pub fn start_buffers(&mut self, device: &wgpu::Device) {
-        let lattice_buff = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Lattice Buffer"),
-            contents: bytemuck::cast_slice(&self.lattice),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let occupancy_buff = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Occupancy Buffer"),
-            contents: bytemuck::cast_slice(&self.occupancy),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let concentrations_buff = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Concentrations Buffer"),
-            contents: bytemuck::cast_slice(&self.concentrations),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
-        });
-        self.lattice_buff = Some(lattice_buff);
-        self.occupancy_buff = Some(occupancy_buff);
-        self.concentrations_buff = Some(concentrations_buff);
+        let usage = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST;
+        self.lattice.create_buffer(device, usage, Some("Lattice Buffer"));
+        self.occupancy.create_buffer(device, usage, Some("Occupancy Buffer"));
+        self.concentrations.create_buffer(device, usage, Some("Concentrations Buffer"));
     }
 
     pub fn init_random_particles(&mut self, particle: Particle, num_particles: u32, starting_region: &Vec<f32>, ending_region: &Vec<f32>) {       
@@ -86,9 +66,6 @@ impl Lattice {
         // TODO: I should add an assert to make sure num_particles is smaller than the volume of the region (particles fit in the region)
 
         let mut rng = rand::thread_rng();
-
-        //let mut lattice: Vec<Particle> = vec![0 as Particle; dimensions * MAX_PARTICLES_SITE];
-        //let mut occupancy: Vec<u32> = vec![0 as u32; dimensions];
 
         for _ in 0..num_particles {
             let mut arr = [0f32; 3];
@@ -109,7 +86,7 @@ impl Lattice {
 
         //self.lattice = lattice;
         //self.occupancy = occupancy;
-        println!("Occupancy: {:?}", self.occupancy);
+        println!("Occupancy: {}", self.occupancy);
     }
 
 
@@ -121,12 +98,13 @@ impl Lattice {
         let z_lattice = (z * res.2 as f32) as usize;
 
         // Starting point of the cell
-        let (occ_index, lattice_index) = self.get_last_element_site_coords(res, x_lattice, y_lattice, z_lattice);
-        if self.occupancy[occ_index] == MAX_PARTICLES_SITE as u32 {
+        //let (occ_index, lattice_index) = self.get_last_element_site_coords(res, x_lattice, y_lattice, z_lattice);
+        if self.occupancy[res] == MAX_PARTICLES_SITE as u32 {
             return Err(String::from("Lattice site is full"));
         }
-        self.lattice[lattice_index + self.occupancy[occ_index] as usize] = particle;
-        self.occupancy[occ_index] += 1;
+        let lattice_index = (res.0, res.1, res.2, self.occupancy[res] as usize);
+        self.lattice[lattice_index] = particle;
+        self.occupancy[res] += 1;
         Ok(String::from("Particle added"))
     }
 

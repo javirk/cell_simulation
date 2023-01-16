@@ -219,6 +219,7 @@ dependencies = [
  "imgui-wgpu",
  "imgui-winit-support",
  "log",
+ "ndarray",
  "pollster",
  "rand",
  "tensor-wgpu",
@@ -1549,7 +1550,7 @@ dependencies = [
 [[package]]
 name = "tensor-wgpu"
 version = "0.0.2"
-source = "git+https://github.com/javirk/tensor-wgpu?tag=0.1.1#d1b9471ffa480ce6440b9b4764250ba52baeee42"
+source = "git+https://github.com/javirk/tensor-wgpu?tag=0.1.2#e456aa4779a29b53321740c4b256497e185fddec"
 dependencies = [
  "bytemuck",
  "ndarray",
