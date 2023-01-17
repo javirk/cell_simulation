@@ -202,22 +202,23 @@ impl Simulation {
         }
 
         // Add the region to the diffusion matrix. It's a 3D matrix. We start by reading the length up to now:
-        let num_regions = new_region_idx as usize;  // Regions
-        let num_particles = self.lattices[0].particle_names.len();  // Particles
-        let num_new_regions = num_regions + 1;
+        // let num_regions = new_region_idx as usize;  // Regions
+        // let num_particles = self.lattices[0].particle_names.len();  // Particles
+        // let num_new_regions = num_regions + 1;
 
-        let mut new_diffusion = vec![default_transition_rate; num_new_regions * num_new_regions * num_particles];
+        // let mut new_diffusion = vec![default_transition_rate; num_new_regions * num_new_regions * num_particles];
 
-        self.diffusion_matrix.matrix_to_matrix(&mut new_diffusion, num_regions, num_new_regions, num_particles);
+        // self.diffusion_matrix.matrix_to_matrix(&mut new_diffusion, num_regions, num_new_regions, num_particles);
 
         // Modify the last element of the added matrix. It's the diffusion rate of the particles in the region
-        for i_part in 0..num_particles {
-            new_diffusion[(num_new_regions * num_new_regions - 1) * (i_part + 1)] = default_diffusion_rate;
-        }
+        // for i_part in 0..num_particles {
+        //     new_diffusion[(num_new_regions * num_new_regions - 1) * (i_part + 1)] = default_diffusion_rate;
+        // }
 
-        println!("Region {} added. New diffusion matrix: {:?}", name, new_diffusion);
+        self.diffusion_matrix.enlarge_dimension(0, default_transition_rate);
+        self.diffusion_matrix.enlarge_dimension(1, default_transition_rate);
 
-        self.diffusion_matrix.matrix = new_diffusion;
+        println!("Region {} added. New diffusion matrix: {}", name, self.diffusion_matrix);
         self.lattice_params.lattice_params.n_regions += 1;
     }
 
@@ -234,15 +235,19 @@ impl Simulation {
         //println!("Particle {} added. New lattice: {:?}", name, self.lattices[0].lattice);
 
         // Update the diffusion matrix now
-        let num_regions = self.regions.names.len();  // Regions
+        // let num_regions = self.regions.names.len();  // Regions
 
-        let mut slice = self.diffusion_matrix.matrix[..num_regions*num_regions].to_vec();
-        self.diffusion_matrix.matrix.append(&mut slice); 
-        println!("Particle {} added. New diffusion matrix: {:?}", name, self.diffusion_matrix.matrix);
+        // let mut slice = self.diffusion_matrix.matrix[..num_regions*num_regions].to_vec();
+        // self.diffusion_matrix.matrix.append(&mut slice); 
+
+        self.diffusion_matrix.copy_dimension(2);
+        // self.diffusion_matrix.enlarge_dimension(2, default_value)
+        println!("Particle {} added. New diffusion matrix: {}", name, self.diffusion_matrix);
 
         // Add one column to stoichiometry matrix.
-        self.stoichiometry_matrix.add_uniform_column(0);
-        println!("New stoichiometry matrix: {:?}", self.stoichiometry_matrix.matrix);
+        // self.stoichiometry_matrix.add_uniform_column(0);
+        self.stoichiometry_matrix.enlarge_dimension(1, 0);
+        println!("New stoichiometry matrix: {}", self.stoichiometry_matrix);
     }
 
 
