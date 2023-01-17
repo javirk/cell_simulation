@@ -1,4 +1,6 @@
+use tensor_wgpu::{Tensor2, Tensor3};
 use wgpu::{util::DeviceExt};
+use ndarray::prelude::*;
 use crate::{
     rdme::RDME, 
     texture::Texture, 
@@ -19,10 +21,10 @@ pub struct Simulation {
     pub lattices: Vec<Lattice>,
     pub lattice_params: LatticeParams,
     regions: Regions,
-    diffusion_matrix: Matrix<f32>,
-    stoichiometry_matrix: Matrix<i32>,
-    reactions_idx: Matrix<u32>,
-    reaction_rates: Matrix<f32>,
+    diffusion_matrix: Tensor3<f32>,
+    stoichiometry_matrix: Tensor2<i32>,
+    reactions_idx: Tensor2<u32>,
+    reaction_rates: Tensor2<f32>,
     reaction_params: Option<ReactionParams>,
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
@@ -53,37 +55,12 @@ impl Simulation {
             buf_size: None
         };
 
-        // The diffusion matrix has 3 dimensions: region x region x particle type
-        let diffusion_matrix = Matrix {
-            matrix: vec![8.15E-14; 1],
-            buffer: None,
-            buf_size: None,
-            num_rows: 1,
-            num_columns: 1
-        };
+        let mut diffusion_matrix = Tensor3::<f32>::zeros((1, 1, 1).f());
+        diffusion_matrix[[0, 0, 0]] = 8.15E-14;
+        let stoichiometry_matrix = Tensor2::<i32>::zeros((1, 1).f());
+        let reactions_idx = Tensor2::<u32>::zeros((1, 3).f());
+        let reaction_rates = Tensor2::<f32>::zeros((1, 1).f());
 
-        let stoichiometry_matrix = Matrix {
-            matrix: vec![0; 1],
-            buffer: None,
-            buf_size: None,
-            num_rows: 1,
-            num_columns: 1
-        };
-
-        let reactions_idx = Matrix {
-            matrix: vec![0; 3],
-            buffer: None,
-            buf_size: None,
-            num_rows: 1,
-            num_columns: 3
-        };
-        let reaction_rates = Matrix {
-            matrix: vec![0.; 1],
-            buffer: None,
-            buf_size: None,
-            num_rows: 1,
-            num_columns: 1
-        };
 
         let bind_groups = Vec::<wgpu::BindGroup>::new();
 
@@ -128,7 +105,8 @@ impl Simulation {
         texture: &Texture,
         device: &wgpu::Device,
     ) {
-        
+        let usage = wgpu::BufferUsages::STORAGE;
+
         self.lattices[1].lattice = self.lattices[0].lattice.clone();
         self.lattices[1].occupancy = self.lattices[0].occupancy.clone();
         self.lattices[0].start_buffers(device);
@@ -136,7 +114,7 @@ impl Simulation {
         
         // Diffusion matrix
         //let diff_buffer_size = self.diffusion_matrix.matrix.len() * std::mem::size_of::<f32>();
-        self.diffusion_matrix.add_buffer(device, Some("Diffusion matrix buffer"));
+        self.diffusion_matrix.create_buffer(device, usage, Some("Diffusion matrix buffer"));
 
         // Regions
         let regions_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -149,18 +127,18 @@ impl Simulation {
         self.lattice_params.create_buffer(device);
         
         // Stoichiometry matrix
-        //let stoich_buffer_size = self.stoichiometry_matrix.matrix.len() * std::mem::size_of::<u32>();
-        self.stoichiometry_matrix.add_buffer(device, Some("Stoichiometry matrix buffer"));
+        self.stoichiometry_matrix.create_buffer(device, usage, Some("Stoichiometry matrix buffer"));
 
         // Reactions idx
-        //let reactions_idx_buffer_size = self.reactions_idx.matrix.len() * std::mem::size_of::<u32>();
-        self.reactions_idx.add_buffer(device, Some("Reactions idx buffer"));
+        self.reactions_idx.create_buffer(device, usage, Some("Reactions idx buffer"));
 
         // Reaction rates
-        self.reaction_rates.add_buffer(device, Some("Reaction rates buffer"));
+        self.reaction_rates.create_buffer(device, usage, Some("Reaction rates buffer"));
 
         // Reaction parameters
-        let reaction_params = ReactionParams::new(self.stoichiometry_matrix.num_columns, self.stoichiometry_matrix.num_rows, device);
+        let num_reactions = self.stoichiometry_matrix.shape()[0] as u32;
+        let num_species = self.stoichiometry_matrix.shape()[1] as u32;
+        let reaction_params = ReactionParams::new(num_species, num_reactions, device);
         self.reaction_params = Some(reaction_params);
 
         let bind_group_layouts = self.build_bind_group_layouts(uniform_buffer, texture, device);
@@ -373,7 +351,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: self.diffusion_matrix.buf_size
+                            min_binding_size: wgpu::BufferSize::new(self.diffusion_matrix.buf_size as _)
                         },
                         count: None,
                     },
@@ -457,7 +435,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: self.stoichiometry_matrix.buf_size,
+                            min_binding_size: wgpu::BufferSize::new(self.stoichiometry_matrix.buf_size as _)
                         },
                         count: None,
                     },
@@ -467,7 +445,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: self.reactions_idx.buf_size,
+                            min_binding_size: wgpu::BufferSize::new(self.reactions_idx.buf_size as _)
                         },
                         count: None,
                     },
@@ -477,7 +455,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: self.reaction_rates.buf_size,
+                            min_binding_size: wgpu::BufferSize::new(self.reaction_rates.buf_size as _)
                         },
                         count: None,
                     },

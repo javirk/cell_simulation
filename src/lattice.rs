@@ -11,17 +11,8 @@ use crate::types::Particle;
 
 
 pub struct Lattice {
-    // pub lattice: Vec<Particle>,
-    // pub lattice_buff: Option<wgpu::Buffer>,
-    // pub lattice_buff_size: usize,
     pub lattice: Tensor<Particle, Ix4>,
-    // pub occupancy: Vec<u32>,
-    // pub occupancy_buff: Option<wgpu::Buffer>,
-    // pub occupancy_buff_size: usize,
     pub occupancy: Tensor3<u32>,
-    // pub concentrations: Vec<u32>,
-    // pub concentrations_buff: Option<wgpu::Buffer>,
-    // pub concentrations_buff_size: usize,
     pub concentrations: Tensor3<u32>,
     lattice_params: Params,
     pub particle_names: Vec<String>,
@@ -36,10 +27,7 @@ impl Lattice {
         let occupancy_buff_size = dimensions * mem::size_of::<u32>();
         let concentrations_buff_size = dimensions * mem::size_of::<u32>();  // This changes over time!
 
-        let lattice: Vec<Particle> = vec![0 as Particle; dimensions * MAX_PARTICLES_SITE];
         let particle_names: Vec<String> = vec![String::from("void")];
-        let occupancy: Vec<u32> = vec![0 as u32; dimensions];
-        let concentrations: Vec<u32> = vec![0 as Particle; dimensions];
 
         let lattice: Tensor<Particle, Ix4> = Tensor::<Particle, _>::zeros((params.x_res as usize, params.y_res as usize, params.z_res as usize, MAX_PARTICLES_SITE as usize).f());
         let occupancy: Tensor3<u32> = Tensor3::<u32>::zeros((params.x_res as usize, params.y_res as usize, params.z_res as usize).f());
@@ -109,11 +97,11 @@ impl Lattice {
     }
 
     fn add_particle_concentration(&mut self, x: f32, y: f32, z: f32, particle: Particle) {
-        let current_num_particles = self.concentrations.len() / self.lattice_params.dimensions();
-        if particle > current_num_particles as u32 {
-            // Not ok, I must take the previous number into account
-            self.concentrations.resize(self.lattice_params.dimensions() * (particle + 1) as usize, 0);
-        }
+        // let current_num_particles = self.concentrations.len() / self.lattice_params.dimensions();
+        // if particle > current_num_particles as u32 {
+        //     // Not ok, I must take the previous number into account
+        //     self.concentrations.resize(self.lattice_params.dimensions() * (particle + 1) as usize, 0);
+        // }
     }
 
     fn get_last_element_site_coords(&self, resolution: (usize, usize, usize), x: usize, y: usize, z: usize) -> (usize, usize) {
@@ -123,15 +111,15 @@ impl Lattice {
     }
 
     pub fn lattice_binding_resource(&self) -> wgpu::BindingResource {
-        self.lattice_buff.as_ref().expect("").as_entire_binding()
+        self.lattice.binding_resource()
     }
 
     pub fn occupancy_binding_resource(&self) -> wgpu::BindingResource {
-        self.occupancy_buff.as_ref().expect("").as_entire_binding()
+        self.occupancy.binding_resource()
     }
 
     pub fn concentrations_binding_resource(&self) -> wgpu::BindingResource {
-        self.concentrations_buff.as_ref().expect("").as_entire_binding()
+        self.concentrations.binding_resource()
     }
 
     #[allow(dead_code)]
@@ -147,19 +135,6 @@ impl Lattice {
 
 impl fmt::Display for Lattice {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO: Add 3D structure in some way.
-        let mut comma_separated = String::new();
-        let mut i = 0;
-        for num in &self.lattice[0..self.lattice.len()] {
-            if (i + 1) % MAX_PARTICLES_SITE != 0 {
-                comma_separated.push_str(&num.to_string());
-                comma_separated.push_str(", ");
-            } else {
-                comma_separated.push_str(&num.to_string());
-                comma_separated.push_str(" | ");
-            }
-            i += 1;
-        }
-        write!(f, "{}", comma_separated)
+        self.lattice.fmt(f)
     }
 }
