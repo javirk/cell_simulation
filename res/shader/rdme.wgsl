@@ -21,6 +21,7 @@ struct Lattice {
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<atomic<u32>>;
 
+@group(2) @binding(0) var <storage, read_write> concentrations: array<f32>;
 
 
 fn writeLatticeSite(idx_lattice: i32, value: u32) {
@@ -46,6 +47,8 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
     let idx_occupancy_src: i32 = get_index_occupancy(volume_src, params);
     let idx_occupancy_dest: i32 = get_index_occupancy(volume_dest, params);
     let idx_lattice_dest: i32 = get_index_lattice(volume_dest, params);
+    let idx_concentration_src: i32 = idx_occupancy_src * params.num_species + i32(particle);
+    let idx_concentration_dest: i32 = idx_occupancy_dest * params.num_species + i32(particle);
    
     // First, move particle away. If it doesn't fit, move it back
     let num_particles_dest = atomicAdd(&occupancyDest[idx_occupancy_dest], 1u);
@@ -53,6 +56,8 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
         writeLatticeSite(idx_lattice_dest, particle);
         atomicSub(&occupancyDest[idx_occupancy_src], 1u);
         atomicStore(&latticeDest.lattice[idx_particle], 0u);
+        atomicAdd(&concentrations[idx_concentration_dest], 1.)
+        atomicSub(&concentrations[idx_concentration_src], 1.)
     } else {
         // Particle doesn't fit
         atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
@@ -112,58 +117,51 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
     // -x
     if (volume_id.x > 0u) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x - 1u, volume_id.y, volume_id.z), params)];
-        probability_vector[0] = probability_value(src_region, dest_region, particle);  
+        (*cumulative_probability)[0] = probability_value(src_region, dest_region, particle);
     } else {
-        probability_vector[0] = 0.;
+        (*cumulative_probability)[0] = 0;
     }
     
     // +x
     if (volume_id.x < (params.x_res - 1u)) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x + 1u, volume_id.y, volume_id.z), params)];
-        probability_vector[1] = probability_value(src_region, dest_region, particle);  
+        (*cumulative_probability)[1] = (*cumulative_probability)[0] + probability_value(src_region, dest_region, particle);
     } else {
-        probability_vector[1] = 0.;
+        (*cumulative_probability)[1] = (*cumulative_probability)[0];
     }
 
     // -y
     if (volume_id.y > 0u) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x, volume_id.y - 1u, volume_id.z), params)];
-        probability_vector[2] = probability_value(src_region, dest_region, particle);  
+        (*cumulative_probability)[2] = (*cumulative_probability)[1] + probability_value(src_region, dest_region, particle);
     } else {
-        probability_vector[2] = 0.;
+        (*cumulative_probability)[2] = (*cumulative_probability)[1];
     }
 
     // +y
     if (volume_id.y < (params.y_res - 1u)) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x, volume_id.y + 1u, volume_id.z), params)];
-        probability_vector[3] = probability_value(src_region, dest_region, particle);  
+        (*cumulative_probability)[3] = (*cumulative_probability)[2] + probability_value(src_region, dest_region, particle);
     } else {
-        probability_vector[3] = 0.;
+        (*cumulative_probability)[3] = (*cumulative_probability)[2];
     }
 
     // -z
     if (volume_id.z > 0u) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x, volume_id.y, volume_id.z - 1u), params)];
-        probability_vector[4] = probability_value(src_region, dest_region, particle);  
+        (*cumulative_probability)[4] = (*cumulative_probability)[3] + probability_value(src_region, dest_region, particle);
     } else {
-        probability_vector[4] = 0.;
+        (*cumulative_probability)[4] = (*cumulative_probability)[3];
     }
 
     // +z
     if (volume_id.z < (params.z_res - 1u)) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x, volume_id.y, volume_id.z + 1u), params)];
-        probability_vector[5] = probability_value(src_region, dest_region, particle);  
+        (*cumulative_probability)[5] = (*cumulative_probability)[4] + probability_value(src_region, dest_region, particle);
     } else {
-        probability_vector[5] = 0.;
+        (*cumulative_probability)[5] = (*cumulative_probability)[4];
     }
     
-    // TODO: Remove this loop
-    for (var i: u32 = 0u; i < 6u; i += 1u) {
-        (*cumulative_probability)[i] = probability_vector[i];
-        if (i > 0u) {
-            (*cumulative_probability)[i] += (*cumulative_probability)[i - 1u];
-        }
-    }
     (*cumulative_probability)[6] = 1.;
 }
 

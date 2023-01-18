@@ -23,27 +23,18 @@ struct ReactionParams {
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
 @group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
 
-@group(2) @binding(0) var <storage, read_write> concentrations: array<f32>;
+@group(2) @binding(0) var <storage, read_write> concentrations: array<u32>;
 @group(2) @binding(1) var <storage, read> stoichiometry: array<f32>;
 @group(2) @binding(2) var <storage, read> reactions_idx: array<i32>;
 @group(2) @binding(3) var <storage, read> reaction_rates: array<f32>;
-// Have a writable concentrations vector as output. This will be used to populate the lattice later instead of the reordering.
-// Information can't be read from there unless I update it in RDME. That's ugly
 
 
 @compute @workgroup_size(1, 1, 1)
 fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Solve CME with Gillespie algorithm
-    let idx_lattice = u32(get_index_lattice(global_id, params));
-    let idx_occupancy = get_index_occupancy(global_id, params);
+    let idx_concentration = get_index_occupancy(global_id, params);
 
-    // Compute concentrations
-    var concentrations: array<f32> = array<f32>(reaction_params.num_species + 1, 0u); // +1 for the void species
-    for (var i_part: u32 = idx_lattice; i_part < idx_lattice + params.max_particles_site; i_part += 1u) {
-        var particle = latticeDest.lattice[i_part];
-        concentrations[particle] += 1u;  // 0s will count too, but they are not considered later
-    }
-    concentrations[0] = 1u;  // In fact I make it 1 so that it doesn't interfere later for the propensity
+    concentrations[idx_concentration] = 1u; // I make it 1 so that it doesn't interfere later for the propensity
     // If reactions_idx[i] == 0 --> concentration[0] = 1 --> It doesn't limit the propensity of the reaction
 
     // Compute propensities
@@ -54,7 +45,9 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let k: f32 = reaction_rates[i_reaction];
         let i_reaction_idx = i_reaction * 3u;
         
-        let propensity: f32 = k * concentrations[reactions_idx[i_reaction_idx]] * concentrations[reactions_idx[i_reaction_idx + 1]] * concentrations[reactions_idx[i_reaction_idx + 2]];
+        let propensity: f32 = k * concentrations[idx_concentration + reactions_idx[i_reaction_idx]] * 
+                                  concentrations[idx_concentration + reactions_idx[i_reaction_idx + 1]] * 
+                                  concentrations[idx_concentration + reactions_idx[i_reaction_idx + 2]];
         propensities[i_reaction] = propensity;
         total_propensity += propensity;
         if (i_reaction > 0) {
@@ -62,7 +55,6 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         } else {
             cumm_propensity[i_reaction] = propensity;
         }
-        
     }
 
     // 1. Generate random and calculate tau
@@ -76,6 +68,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     let tau: f32 = (1. / total_propensity) * log(1. / rand_number);
+    unif.tau = tau;
     rand_number = UniformFloat(state + 1u);
 
     var i: i32 = 0;  // Index of the reaction
@@ -83,11 +76,26 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         i += 1;
     }
 
-    // Loop the stoichiometry matrix row and apply it to the concentrations vector
+    // Loop the stoichiometry matrix row and apply it to the concentrations vector. Update the lattice at the same time
+    let idx_lattice = u32(get_index_lattice(global_id, params));
+    let j_lattice = 0u;
     let idx_reaction = i * reaction_params.num_species;
     for (var idx_species = 0; idx_species < reaction_params.num_species; idx_species += 1u) {
-        concentrations[idx_species] += stoichiometry[idx_reaction + idx_species];
+        concentrations[idx_concentration + idx_species] += stoichiometry[idx_reaction + idx_species];
+        // Now update the lattice:
+        // Look at the concentration of the species in the site and write 
+        var cc: u32 = concentrations[idx_concentration + idx_species];
+        while (cc > 0u) {
+            latticeDest[idx_lattice + j_lattice] = idx_species;
+            cc -= 1u;
+            j_lattice += 1u;
+            if j_lattice >= params.max_particles_site {
+                break
+            }
+        }
     }
-
-
+    while (j_lattice < params.max_particles_site) {
+        latticeDest[idx_lattice + j_lattice] = 0u;
+        j_lattice += 1u;
+    }
 }

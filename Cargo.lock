@@ -1550,7 +1550,7 @@ dependencies = [
 [[package]]
 name = "tensor-wgpu"
 version = "0.0.2"
-source = "git+https://github.com/javirk/tensor-wgpu?rev=553abb454c137c04a05bbd95773604473595a2bc#553abb454c137c04a05bbd95773604473595a2bc"
+source = "git+https://github.com/javirk/tensor-wgpu?rev=ade557b434d1d35f610742a47d6afb7c1488aae9#ade557b434d1d35f610742a47d6afb7c1488aae9"
 dependencies = [
  "bytemuck",
  "ndarray",

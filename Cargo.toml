@@ -19,7 +19,7 @@ imgui = "0.9"
 imgui-winit-support = { version = "0.9"  }
 imgui-wgpu = "0.21.0"
 cgmath = "0.18"
-tensor-wgpu =  { git = "https://github.com/javirk/tensor-wgpu", rev = "553abb454c137c04a05bbd95773604473595a2bc"}
+tensor-wgpu =  { git = "https://github.com/javirk/tensor-wgpu", rev = "ade557b434d1d35f610742a47d6afb7c1488aae9"}
 ndarray = "0.15.6"
 
 [patch.crates-io]

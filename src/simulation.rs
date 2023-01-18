@@ -30,12 +30,13 @@ pub struct Simulation {
 }
 
 struct Regions {
-    regions: Vec<Region>, // --> Should maybe be a Matrix to have the buffer and the size together.
+    regions: Vec<Region>, // --> Should maybe be a Tensor (1D) to have the buffer and the size together.
     positions: Vec<Vec<Vec<f32>>>,  // Starting corner, ending corner
     names: Vec<String>,
     buffer: Option<wgpu::Buffer>,
     buf_size: Option<wgpu::BufferSize>
 }
+
 
 impl Simulation {
     pub fn new(
@@ -60,7 +61,6 @@ impl Simulation {
         let stoichiometry_matrix = Tensor2::<i32>::zeros((1, 1).f());
         let reactions_idx = Tensor2::<u32>::zeros((1, 3).f());
         let reaction_rates = Tensor2::<f32>::zeros((1, 1).f());
-
 
         let bind_groups = Vec::<wgpu::BindGroup>::new();
 
@@ -217,6 +217,11 @@ impl Simulation {
 
         self.diffusion_matrix.enlarge_dimension(0, default_transition_rate);
         self.diffusion_matrix.enlarge_dimension(1, default_transition_rate);
+        let num_regions = self.regions.names.len();
+        let num_particles = self.lattices[0].particle_names.len();
+        for i_part in 0..num_particles {
+            self.diffusion_matrix[[num_regions, num_regions, i_part]] = default_diffusion_rate;
+        }
 
         println!("Region {} added. New diffusion matrix: {}", name, self.diffusion_matrix);
         self.lattice_params.lattice_params.n_regions += 1;
@@ -252,20 +257,45 @@ impl Simulation {
 
 
     #[allow(dead_code)]
-    pub fn set_diffusion_rate() {
-        // TODO
+    pub fn set_diffusion_rate(&mut self, region: &str, diffusion_rate: f32) {
+        // Write diffusion rate for all the particles in a region
+        let region_idx = self.regions.names.iter().position(|x| x == region).unwrap() as usize;
+        let num_particles = self.lattices[0].particle_names.len();
+        for i_part in 0..num_particles {
+            self.diffusion_matrix[[region_idx, region_idx, i_part]] = diffusion_rate;
+        }
     }
+
     #[allow(dead_code)]
-    pub fn set_diffusion_rate_particle() {
-        // TODO
+    pub fn set_diffusion_rate_particle(&mut self, particle: &str, region: &str, diffusion_rate: f32) {
+        // Write diffusion rate for a given particle. Note: Diffusion != Transition (Region x Region x Particle)
+        let region_idx = self.regions.names.iter().position(|x| x == region).unwrap() as usize;
+        let particle_idx = self.lattices[0].particle_names.iter().position(|x| x == particle).unwrap() as usize;
+        self.diffusion_matrix[[region_idx, region_idx, particle_idx]] = diffusion_rate;
+    }
+
+    #[allow(dead_code)]
+    pub fn set_transition_rate(&mut self, from_region: &str, to_region: &str, transition_rate: f32) {
+        // Write transition rate for all the particles in a region
+        let from_region_idx = self.regions.names.iter().position(|x| x == from_region).unwrap() as usize;
+        let to_region_idx = self.regions.names.iter().position(|x| x == to_region).unwrap() as usize;
+        let num_particles = self.lattices[0].particle_names.len();
+        for i_part in 0..num_particles {
+            self.diffusion_matrix[[from_region_idx, to_region_idx, i_part]] = transition_rate;
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn set_transition_rate_particle(&mut self, particle: &str, from_region: &str, to_region: &str, transition_rate: f32) {
+        // Write transition rate for a given particle. Note: Diffusion != Transition (Region x Region x Particle)
+        let from_region_idx = self.regions.names.iter().position(|x| x == from_region).unwrap() as usize;
+        let to_region_idx = self.regions.names.iter().position(|x| x == to_region).unwrap() as usize;
+        let particle_idx = self.lattices[0].particle_names.iter().position(|x| x == particle).unwrap() as usize;
+        self.diffusion_matrix[[from_region_idx, to_region_idx, particle_idx]] = transition_rate;
     }
 
     pub fn add_reaction(&mut self, reactants: Vec<&str>, products: Vec<&str>, k: f32) {
         // Add a reaction to the simulation. It is independent of the region since particles are defined per region.
-        // Steps:
-        // 1. Add row to stoichiometry matrix. This row has values 
-        // 2. Add row to index matrix
-
         // Maybe the following can be made two map iters
         let mut reactants_idx = Vec::<usize>::new();
         for reactant in reactants {
@@ -284,26 +314,39 @@ impl Simulation {
         println!("Reactants: {:?}, products: {:?}", reactants_idx, products_idx);
 
         // Update stoichiometry matrix
-        let mut stoichiometry_matrix_row = vec![0; self.stoichiometry_matrix.num_columns as usize];
+        self.stoichiometry_matrix.enlarge_dimension(0, 0);
+        let num_rows = self.stoichiometry_matrix.shape()[0];
+
         for reactant_idx in &reactants_idx {
-            stoichiometry_matrix_row[*reactant_idx] -= 1;
+            self.stoichiometry_matrix[[num_rows - 1, *reactant_idx]] -= 1;
         }
         for product_idx in products_idx {
-            stoichiometry_matrix_row[product_idx] += 1;
+            self.stoichiometry_matrix[[num_rows - 1, product_idx]] += 1;
         }
-        self.stoichiometry_matrix.add_row(stoichiometry_matrix_row);
-        println!("New stoichiometry matrix: {:?} with {} rows and {} columns", self.stoichiometry_matrix.matrix, self.stoichiometry_matrix.num_rows, self.stoichiometry_matrix.num_columns);
+
+        // let mut stoichiometry_matrix_row = vec![0; self.stoichiometry_matrix.num_columns as usize];
+        // for reactant_idx in &reactants_idx {
+        //     stoichiometry_matrix_row[*reactant_idx] -= 1;
+        // }
+        // for product_idx in products_idx {
+        //     stoichiometry_matrix_row[product_idx] += 1;
+        // }
+        // self.stoichiometry_matrix.add_row(stoichiometry_matrix_row);
+        println!("New stoichiometry matrix: {} with {} rows and {} columns", self.stoichiometry_matrix, self.stoichiometry_matrix.shape()[0], self.stoichiometry_matrix.shape()[1]);
 
         // Update index matrix
         reactants_idx.extend(std::iter::repeat(0 as usize).take(3 - reactants_idx.len()));
         let reactants_idx_u32 = reactants_idx.iter().map(|x| *x as u32).collect::<Vec<u32>>();
+        self.reactions_idx.concatenate_vector(&reactants_idx_u32, 0);
+        //self.reactions_idx.concatenate(&tensor, 0);
         println!("Reactants idx : {:?}", reactants_idx_u32);
-        self.reactions_idx.add_row(reactants_idx_u32);
-        println!("New reactions index matrix: {:?}", self.reactions_idx.matrix);
+        // self.reactions_idx.add_row(reactants_idx_u32);
+        println!("New reactions index matrix: {}", self.reactions_idx);
 
         // Update reaction rates vector
-        self.reaction_rates.add_row(vec![k]);
-        println!("New reaction rates vector: {:?}", self.reaction_rates.matrix);
+        self.reaction_rates.concatenate_vector(&vec![k], 0);
+        //self.reaction_rates.add_row(vec![k]);
+        println!("New reaction rates vector: {}", self.reaction_rates);
     }
 }
 
@@ -375,7 +418,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].lattice.buf_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].lattice.buffer_size() as _),
                         },
                         count: None,
                     },
@@ -385,7 +428,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].lattice.buf_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].lattice.buffer_size() as _),
                         },
                         count: None,
                     },
@@ -396,7 +439,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].occupancy.buf_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].occupancy.buffer_size() as _),
                         },
                         count: None,
                     },
@@ -406,7 +449,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].occupancy.buf_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[1].occupancy.buffer_size() as _),
                         },
                         count: None,
                     },
@@ -430,7 +473,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].concentrations.buf_size as _),
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].concentrations.buffer_size() as _),
                         },
                         count: None,
                     },
@@ -440,7 +483,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.stoichiometry_matrix.buf_size as _)
+                            min_binding_size: wgpu::BufferSize::new(self.stoichiometry_matrix.buffer_size() as _)
                         },
                         count: None,
                     },
@@ -450,7 +493,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.reactions_idx.buf_size as _)
+                            min_binding_size: wgpu::BufferSize::new(self.reactions_idx.buffer_size() as _)
                         },
                         count: None,
                     },
@@ -460,7 +503,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.reaction_rates.buf_size as _)
+                            min_binding_size: wgpu::BufferSize::new(self.reaction_rates.buffer_size() as _)
                         },
                         count: None,
                     },
@@ -518,19 +561,19 @@ impl Simulation {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.lattices[i].lattice_binding_resource(),
+                        resource: self.lattices[i].lattice.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.lattices[(i + 1) % 2].lattice_binding_resource(), // bind to opposite buffer
+                        resource: self.lattices[(i + 1) % 2].lattice.binding_resource(), // bind to opposite buffer
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: self.lattices[i].occupancy_binding_resource(),
+                        resource: self.lattices[i].occupancy.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: self.lattices[(i + 1) % 2].occupancy_binding_resource(),
+                        resource: self.lattices[(i + 1) % 2].occupancy.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,
@@ -547,19 +590,19 @@ impl Simulation {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: self.lattices[0].concentrations_binding_resource(),
+                        resource: self.lattices[0].concentrations.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.stoichiometry_matrix.buffer.as_ref().expect("").as_entire_binding(),
+                        resource: self.stoichiometry_matrix.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: self.reactions_idx.buffer.as_ref().expect("").as_entire_binding(),
+                        resource: self.reactions_idx.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: self.reaction_rates.buffer.as_ref().expect("").as_entire_binding(),
+                        resource: self.reaction_rates.binding_resource(),
                     },
                 ],
                 label: Some("Reactions bind group"),

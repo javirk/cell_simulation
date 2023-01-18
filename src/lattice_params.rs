@@ -57,7 +57,7 @@ impl LatticeParams {
         self.param_buf = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("parameters buffer"),
             contents: bytemuck::bytes_of(&self.lattice_params),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM,
         }));
     }
 

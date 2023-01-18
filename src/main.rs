@@ -89,7 +89,7 @@ impl framework::Framework for CellSimulation {
         simulation.add_particle("p1", "one", 200);
         simulation.add_particle("p2", "one", 200);
 
-        //simulation.add_reaction(vec!["p1"], vec!["p2"], 1.);
+        simulation.add_reaction(vec!["p1"], vec!["p2"], 1.);
 
         simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
         
@@ -121,19 +121,19 @@ impl framework::Framework for CellSimulation {
         // Copy source to destination (lattice and occupancy)
         // This drops performance by 2x, but I don't know any other way to do it
         command_encoder.copy_buffer_to_buffer(
-            &self.simulation.lattices[(frame_num as usize + 1) % 2].lattice_buff.as_ref().expect(""), 
+            self.simulation.lattices[(frame_num as usize + 1) % 2].lattice.buffer(), 
             0, 
-            &self.simulation.lattices[frame_num as usize % 2].lattice_buff.as_ref().expect(""), 
+            self.simulation.lattices[frame_num as usize % 2].lattice.buffer(), 
             0,
-            self.simulation.lattices[frame_num as usize % 2].lattice_buff_size as u64
+            self.simulation.lattices[frame_num as usize % 2].lattice.buffer_size() as u64
         );
 
         command_encoder.copy_buffer_to_buffer(
-            &self.simulation.lattices[(frame_num as usize + 1) % 2].occupancy_buff.as_ref().expect(""), 
+            self.simulation.lattices[(frame_num as usize + 1) % 2].occupancy.buffer(), 
             0, 
-            &self.simulation.lattices[frame_num as usize % 2].occupancy_buff.as_ref().expect(""), 
+            self.simulation.lattices[frame_num as usize % 2].occupancy.buffer(), 
             0,
-            self.simulation.lattices[frame_num as usize % 2].occupancy_buff_size as u64
+            self.simulation.lattices[frame_num as usize % 2].occupancy.buffer_size() as u64
         );
 
         //queue.submit(Some(command_encoder.finish()));
