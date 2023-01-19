@@ -80,13 +80,13 @@ impl Lattice {
         let z_lattice = (z * res.2 as f32) as usize;
 
         // Starting point of the cell
-        if self.occupancy[res] == MAX_PARTICLES_SITE as u32 {
+        if self.occupancy[[x_lattice, y_lattice, z_lattice]] == MAX_PARTICLES_SITE as u32 {
             return Err(String::from("Lattice site is full"));
         }
-        let lattice_index = (x_lattice, y_lattice, z_lattice, self.occupancy[res] as usize);
+        let lattice_index = (x_lattice, y_lattice, z_lattice, self.occupancy[[x_lattice, y_lattice, z_lattice]] as usize);
         let concentration_index = (x_lattice, y_lattice, z_lattice, particle as usize);
         self.lattice[lattice_index] = particle;
-        self.occupancy[res] += 1;
+        self.occupancy[[x_lattice, y_lattice, z_lattice]] += 1;
         self.concentrations[concentration_index] += 1;
         Ok(String::from("Particle added"))
     }

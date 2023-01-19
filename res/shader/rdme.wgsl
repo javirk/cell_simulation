@@ -12,6 +12,7 @@ struct Lattice {
 
 
 @group(0) @binding(0) var<uniform> params: LatticeParams;
+@group(0) @binding(1) var<uniform> reaction_params: ReactionParams;
 @group(0) @binding(2) var<uniform> unif: Uniforms;
 @group(0) @binding(3) var<storage> regions: array<u32>;
 @group(0) @binding(4) var<storage> diffusion_matrix: array<f32>;
@@ -21,7 +22,7 @@ struct Lattice {
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<atomic<u32>>;
 
-@group(2) @binding(0) var <storage, read_write> concentrations: array<f32>;
+@group(2) @binding(0) var <storage, read_write> concentrations: array<atomic<u32>>;
 
 
 fn writeLatticeSite(idx_lattice: i32, value: u32) {
@@ -47,8 +48,8 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
     let idx_occupancy_src: i32 = get_index_occupancy(volume_src, params);
     let idx_occupancy_dest: i32 = get_index_occupancy(volume_dest, params);
     let idx_lattice_dest: i32 = get_index_lattice(volume_dest, params);
-    let idx_concentration_src: i32 = idx_occupancy_src * params.num_species + i32(particle);
-    let idx_concentration_dest: i32 = idx_occupancy_dest * params.num_species + i32(particle);
+    let idx_concentration_src: i32 = idx_occupancy_src * i32(reaction_params.num_species) + i32(particle);
+    let idx_concentration_dest: i32 = idx_occupancy_dest * i32(reaction_params.num_species) + i32(particle);
    
     // First, move particle away. If it doesn't fit, move it back
     let num_particles_dest = atomicAdd(&occupancyDest[idx_occupancy_dest], 1u);
@@ -56,8 +57,8 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
         writeLatticeSite(idx_lattice_dest, particle);
         atomicSub(&occupancyDest[idx_occupancy_src], 1u);
         atomicStore(&latticeDest.lattice[idx_particle], 0u);
-        atomicAdd(&concentrations[idx_concentration_dest], 1.)
-        atomicSub(&concentrations[idx_concentration_src], 1.)
+        atomicAdd(&concentrations[idx_concentration_dest], 1u);
+        atomicSub(&concentrations[idx_concentration_src], 1u);
     } else {
         // Particle doesn't fit
         atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
@@ -119,7 +120,7 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x - 1u, volume_id.y, volume_id.z), params)];
         (*cumulative_probability)[0] = probability_value(src_region, dest_region, particle);
     } else {
-        (*cumulative_probability)[0] = 0;
+        (*cumulative_probability)[0] = 0.;
     }
     
     // +x

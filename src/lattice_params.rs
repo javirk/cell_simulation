@@ -20,7 +20,7 @@ pub struct Params {
     max_particles_site: u32,
     pub n_regions: u32,
     lambda: f32, // I hope this only depends on the lattice constants.
-    tau: f32
+    tau: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ impl LatticeParams {
             max_particles_site: MAX_PARTICLES_SITE as u32,
             n_regions: 1,
             lambda: 31.25E-9,
-            tau: 2E-3
+            tau: 2E-3,
         };
 
         LatticeParams {

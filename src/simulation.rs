@@ -25,7 +25,7 @@ pub struct Simulation {
     stoichiometry_matrix: Tensor2<i32>,
     reactions_idx: Tensor2<u32>,
     reaction_rates: Tensor2<f32>,
-    reaction_params: Option<ReactionParams>,
+    reaction_params: ReactionParams,
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
 
@@ -56,6 +56,8 @@ impl Simulation {
             buf_size: None
         };
 
+        let reaction_params = ReactionParams::new(0, 0);
+
         let mut diffusion_matrix = Tensor3::<f32>::zeros((1, 1, 1).f());
         diffusion_matrix[[0, 0, 0]] = 8.15E-14;
         let stoichiometry_matrix = Tensor2::<i32>::zeros((1, 1).f());
@@ -75,7 +77,7 @@ impl Simulation {
             stoichiometry_matrix,
             reactions_idx,
             reaction_rates,
-            reaction_params: None,
+            reaction_params,
             texture_compute_pipeline: None
         }
         
@@ -88,7 +90,7 @@ impl Simulation {
     ) {
         self.rdme.as_ref()
             .expect("RDME must be initialized first")
-            .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], command_encoder, &self.lattice_params.lattice_params);
+            .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
 
         // cme step
         self.cme.as_ref()
@@ -125,6 +127,7 @@ impl Simulation {
         self.regions.buffer = Some(regions_buffer);
         self.regions.buf_size = wgpu::BufferSize::new((self.regions.regions.len() * std::mem::size_of::<Region>()) as _,);
         self.lattice_params.create_buffer(device);
+        self.reaction_params.create_buffer(device);
         
         // Stoichiometry matrix
         self.stoichiometry_matrix.create_buffer(device, usage, Some("Stoichiometry matrix buffer"));
@@ -134,12 +137,6 @@ impl Simulation {
 
         // Reaction rates
         self.reaction_rates.create_buffer(device, usage, Some("Reaction rates buffer"));
-
-        // Reaction parameters
-        let num_reactions = self.stoichiometry_matrix.shape()[0] as u32;
-        let num_species = self.stoichiometry_matrix.shape()[1] as u32;
-        let reaction_params = ReactionParams::new(num_species, num_reactions, device);
-        self.reaction_params = Some(reaction_params);
 
         let bind_group_layouts = self.build_bind_group_layouts(uniform_buffer, texture, device);
 
@@ -217,7 +214,7 @@ impl Simulation {
 
         self.diffusion_matrix.enlarge_dimension(0, default_transition_rate);
         self.diffusion_matrix.enlarge_dimension(1, default_transition_rate);
-        let num_regions = self.regions.names.len();
+        let num_regions = self.regions.names.len() - 1;
         let num_particles = self.lattices[0].particle_names.len();
         for i_part in 0..num_particles {
             self.diffusion_matrix[[num_regions, num_regions, i_part]] = default_diffusion_rate;
@@ -253,6 +250,7 @@ impl Simulation {
         // self.stoichiometry_matrix.add_uniform_column(0);
         self.stoichiometry_matrix.enlarge_dimension(1, 0);
         println!("New stoichiometry matrix: {}", self.stoichiometry_matrix);
+        self.reaction_params.raw_params.num_species += 1;
     }
 
 
@@ -347,6 +345,7 @@ impl Simulation {
         self.reaction_rates.concatenate_vector(&vec![k], 0);
         //self.reaction_rates.add_row(vec![k]);
         println!("New reaction rates vector: {}", self.reaction_rates);
+        self.reaction_params.raw_params.num_reactions += 1;
     }
 }
 
@@ -372,7 +371,7 @@ impl Simulation {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: self.reaction_params.as_ref().expect("").binding_type(),
+                        ty: self.reaction_params.binding_type(),
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
@@ -536,7 +535,7 @@ impl Simulation {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: self.reaction_params.as_ref().expect("").binding_resource(),
+                        resource: self.reaction_params.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,

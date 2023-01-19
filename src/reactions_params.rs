@@ -8,8 +8,8 @@ use std::mem;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Params {
-    num_species: u32,
-    num_reactions: u32
+    pub num_species: u32,
+    pub num_reactions: u32
 }
 
 // ---------------------------------------------------------------------------
@@ -20,22 +20,24 @@ pub struct ReactionParams {
 }
 
 impl ReactionParams {
-    pub fn new(num_species: u32, num_reactions: u32, device: &wgpu::Device) -> Self {
+    pub fn new(num_species: u32, num_reactions: u32) -> Self {
         let reaction_params = Params {
             num_species,
             num_reactions
         };
 
-        let param_buf = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("reaction parameters buffer"),
-            contents: bytemuck::bytes_of(&reaction_params),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        }));
-
         ReactionParams {
             raw_params: reaction_params,
-            param_buf: param_buf,
+            param_buf: None,
         }
+    }
+
+    pub fn create_buffer(&mut self, device: &wgpu::Device) {
+        self.param_buf = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("reaction parameters buffer"),
+            contents: bytemuck::bytes_of(&self.raw_params),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        }));
     }
 
     pub fn binding_resource(&self) -> wgpu::BindingResource {

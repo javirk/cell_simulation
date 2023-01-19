@@ -10,11 +10,6 @@ struct Lattice {
     lattice: array<u32>,
 };
 
-struct ReactionParams {
-    num_species: u32,
-    num_reactions: u32
-}
-
 
 @group(0) @binding(0) var<uniform> params: LatticeParams;
 @group(0) @binding(1) var<uniform> reaction_params: ReactionParams;
@@ -45,9 +40,9 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let k: f32 = reaction_rates[i_reaction];
         let i_reaction_idx = i_reaction * 3u;
         
-        let propensity: f32 = k * concentrations[idx_concentration + reactions_idx[i_reaction_idx]] * 
-                                  concentrations[idx_concentration + reactions_idx[i_reaction_idx + 1]] * 
-                                  concentrations[idx_concentration + reactions_idx[i_reaction_idx + 2]];
+        let propensity: f32 = k * f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx]]) * 
+                                  f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx + 1]]) * 
+                                  f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx + 2]]);
         propensities[i_reaction] = propensity;
         total_propensity += propensity;
         if (i_reaction > 0) {
@@ -60,15 +55,15 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // 1. Generate random and calculate tau
     // 2. Find next reaction with the propensity vector
     // 3. Perform reaction: I need to know where the different species are. That means another loop or save them in the previous one
-    var state: u32 = Hash_Wang(unif.itime + X * Y + Z + u32(idx_lattice));
+    var state: u32 = Hash_Wang(unif.itime + global_id.x * global_id.y + global_id.z);
     var rand_number: f32 = UniformFloat(state);
 
-    if total_propensity == 0. {
-        return
+    if (total_propensity == 0.) {
+        return;
     }
 
     let tau: f32 = (1. / total_propensity) * log(1. / rand_number);
-    unif.tau = tau;
+    params.tau += tau;
     rand_number = UniformFloat(state + 1u);
 
     var i: i32 = 0;  // Index of the reaction
@@ -80,7 +75,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let idx_lattice = u32(get_index_lattice(global_id, params));
     let j_lattice = 0u;
     let idx_reaction = i * reaction_params.num_species;
-    for (var idx_species = 0; idx_species < reaction_params.num_species; idx_species += 1u) {
+    for (var idx_species = 0u; idx_species < reaction_params.num_species; idx_species += 1u) {
         concentrations[idx_concentration + idx_species] += stoichiometry[idx_reaction + idx_species];
         // Now update the lattice:
         // Look at the concentration of the species in the site and write 
@@ -89,8 +84,8 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
             latticeDest[idx_lattice + j_lattice] = idx_species;
             cc -= 1u;
             j_lattice += 1u;
-            if j_lattice >= params.max_particles_site {
-                break
+            if (j_lattice >= params.max_particles_site) {
+                break;
             }
         }
     }
