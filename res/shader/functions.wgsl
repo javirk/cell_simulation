@@ -1,3 +1,5 @@
+let MAX_REACTIONS: u32 = 100u;
+
 struct LatticeParams {
     x: f32,
     y: f32,

@@ -11,7 +11,7 @@ use crate::types::Particle;
 pub struct Lattice {
     pub lattice: Tensor4<Particle>,
     pub occupancy: Tensor3<u32>,
-    pub concentrations: Tensor4<u32>,
+    pub concentrations: Tensor4<i32>,
     lattice_params: Params,
     pub particle_names: Vec<String>,
 }
@@ -28,7 +28,7 @@ impl Lattice {
 
         let lattice: Tensor4<Particle> = Tensor4::<Particle>::zeros(shape_lattice);
         let occupancy: Tensor3<u32> = Tensor3::<u32>::zeros(shape_3d);
-        let concentrations: Tensor4<u32> = Tensor4::<u32>::zeros(shape_concentrations);
+        let concentrations: Tensor4<i32> = Tensor4::<i32>::zeros(shape_concentrations);
 
         Lattice {
             lattice,

@@ -90,12 +90,24 @@ impl Simulation {
     ) {
         self.rdme.as_ref()
             .expect("RDME must be initialized first")
-            .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
+            .step(
+                &self.bind_groups[0],
+                &self.bind_groups[1 + (frame_num as usize % 2)],
+                &self.bind_groups[3],
+                command_encoder, 
+                &self.lattice_params.lattice_params
+            );
 
         // cme step
         self.cme.as_ref()
             .expect("CME must be initialized first")
-            .step(&self.bind_groups[0], &self.bind_groups[1 + (frame_num as usize % 2)], &self.bind_groups[3], command_encoder, &self.lattice_params.lattice_params);
+            .step(
+                &self.bind_groups[0],
+                &self.bind_groups[1 + (frame_num as usize % 2)],
+                &self.bind_groups[3],
+                command_encoder,
+                &self.lattice_params.lattice_params
+            );
 
         // Fill the texture
         self.texture_pass(frame_num, command_encoder);
@@ -198,20 +210,7 @@ impl Simulation {
             }
         }
 
-        // Add the region to the diffusion matrix. It's a 3D matrix. We start by reading the length up to now:
-        // let num_regions = new_region_idx as usize;  // Regions
-        // let num_particles = self.lattices[0].particle_names.len();  // Particles
-        // let num_new_regions = num_regions + 1;
-
-        // let mut new_diffusion = vec![default_transition_rate; num_new_regions * num_new_regions * num_particles];
-
-        // self.diffusion_matrix.matrix_to_matrix(&mut new_diffusion, num_regions, num_new_regions, num_particles);
-
-        // Modify the last element of the added matrix. It's the diffusion rate of the particles in the region
-        // for i_part in 0..num_particles {
-        //     new_diffusion[(num_new_regions * num_new_regions - 1) * (i_part + 1)] = default_diffusion_rate;
-        // }
-
+        // Add the region to the diffusion matrix. 
         self.diffusion_matrix.enlarge_dimension(0, default_transition_rate);
         self.diffusion_matrix.enlarge_dimension(1, default_transition_rate);
         let num_regions = self.regions.names.len() - 1;
@@ -236,18 +235,11 @@ impl Simulation {
         self.lattices[0].init_random_particles(particle_idx, count, &starting_region, &ending_region);
         //println!("Particle {} added. New lattice: {:?}", name, self.lattices[0].lattice);
 
-        // Update the diffusion matrix now
-        // let num_regions = self.regions.names.len();  // Regions
-
-        // let mut slice = self.diffusion_matrix.matrix[..num_regions*num_regions].to_vec();
-        // self.diffusion_matrix.matrix.append(&mut slice); 
-
+        // Update the diffusion matrix
         self.diffusion_matrix.copy_dimension(2);
-        // self.diffusion_matrix.enlarge_dimension(2, default_value)
         println!("Particle {} added. New diffusion matrix: {}", name, self.diffusion_matrix);
 
         // Add one column to stoichiometry matrix.
-        // self.stoichiometry_matrix.add_uniform_column(0);
         self.stoichiometry_matrix.enlarge_dimension(1, 0);
         println!("New stoichiometry matrix: {}", self.stoichiometry_matrix);
         self.reaction_params.raw_params.num_species += 1;
@@ -321,29 +313,17 @@ impl Simulation {
         for product_idx in products_idx {
             self.stoichiometry_matrix[[num_rows - 1, product_idx]] += 1;
         }
-
-        // let mut stoichiometry_matrix_row = vec![0; self.stoichiometry_matrix.num_columns as usize];
-        // for reactant_idx in &reactants_idx {
-        //     stoichiometry_matrix_row[*reactant_idx] -= 1;
-        // }
-        // for product_idx in products_idx {
-        //     stoichiometry_matrix_row[product_idx] += 1;
-        // }
-        // self.stoichiometry_matrix.add_row(stoichiometry_matrix_row);
         println!("New stoichiometry matrix: {} with {} rows and {} columns", self.stoichiometry_matrix, self.stoichiometry_matrix.shape()[0], self.stoichiometry_matrix.shape()[1]);
 
         // Update index matrix
         reactants_idx.extend(std::iter::repeat(0 as usize).take(3 - reactants_idx.len()));
         let reactants_idx_u32 = reactants_idx.iter().map(|x| *x as u32).collect::<Vec<u32>>();
         self.reactions_idx.concatenate_vector(&reactants_idx_u32, 0);
-        //self.reactions_idx.concatenate(&tensor, 0);
         println!("Reactants idx : {:?}", reactants_idx_u32);
-        // self.reactions_idx.add_row(reactants_idx_u32);
         println!("New reactions index matrix: {}", self.reactions_idx);
 
         // Update reaction rates vector
         self.reaction_rates.concatenate_vector(&vec![k], 0);
-        //self.reaction_rates.add_row(vec![k]);
         println!("New reaction rates vector: {}", self.reaction_rates);
         self.reaction_params.raw_params.num_reactions += 1;
     }
