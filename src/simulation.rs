@@ -241,7 +241,6 @@ impl Simulation {
 
         // Add one column to stoichiometry matrix.
         self.stoichiometry_matrix.enlarge_dimension(1, 0);
-        println!("New stoichiometry matrix: {}", self.stoichiometry_matrix);
         self.reaction_params.raw_params.num_species += 1;
     }
 

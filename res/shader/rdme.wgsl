@@ -113,6 +113,7 @@ fn probability_value(src_region: u32, dest_region: u32, particle: u32) -> f32 {
 }
 
 fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_probability: ptr<function, array<f32, 7>>) {
+    // Fix: probabilities should be equal in all directions
     var probability_vector: array<f32, 7>;
     let src_region = regions[get_index_occupancy(volume_id, params)];
     // -x

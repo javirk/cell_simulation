@@ -27,7 +27,7 @@ struct Lattice {
 @compute @workgroup_size(1, 1, 1)
 fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Solve CME with Gillespie algorithm
-    let idx_concentration: i32 = get_index_occupancy(global_id, params);
+    let idx_concentration: i32 = get_index_occupancy(global_id, params) * i32(reaction_params.num_species);
 
     concentrations[idx_concentration] = 1; // I make it 1 so that it doesn't interfere later for the propensity
     // If reactions_idx[i] == 0 --> concentration[0] = 1 --> It doesn't limit the propensity of the reaction
@@ -36,7 +36,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var propensities: array<f32, MAX_REACTIONS>;
     var cumm_propensity: array<f32, MAX_REACTIONS>;
     var total_propensity: f32 = 0.0f;
-    for (var i_reaction: u32 = 0u; i_reaction < reaction_params.num_reactions; i_reaction += 1u) { // Make sure if this is like this or with +1 somewhere
+    for (var i_reaction: u32 = 1u; i_reaction <= reaction_params.num_reactions; i_reaction += 1u) { // Make sure if this is like this or with +1 somewhere
         let k: f32 = reaction_rates[i_reaction];
         let i_reaction_idx = i_reaction * 3u;
         
@@ -45,7 +45,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
                                   f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx + 2u]]);
         propensities[i_reaction] = propensity;
         total_propensity += propensity;
-        if (i_reaction > 0u) {
+        if (i_reaction > 1u) {
             cumm_propensity[i_reaction] = cumm_propensity[i_reaction - 1u] + propensity;
         } else {
             cumm_propensity[i_reaction] = propensity;
@@ -70,8 +70,8 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // Loop the stoichiometry matrix row and apply it to the concentrations vector. Update the lattice at the same time
         let idx_lattice = u32(get_index_lattice(global_id, params));
         var j_lattice = 0u;
-        let idx_reaction = i32(i * reaction_params.num_species);
-        for (var idx_species = 0; idx_species < i32(reaction_params.num_species); idx_species += 1) {
+        let idx_reaction = i32(i * (reaction_params.num_species + 1u));
+        for (var idx_species = 1; idx_species <= i32(reaction_params.num_species); idx_species += 1) {
             concentrations[idx_concentration + idx_species] += stoichiometry[idx_reaction + idx_species];
             // Now update the lattice:
             // Look at the concentration of the species in the site and write 

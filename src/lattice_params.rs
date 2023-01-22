@@ -44,7 +44,7 @@ impl LatticeParams {
             max_particles_site: MAX_PARTICLES_SITE as u32,
             n_regions: 1,
             lambda: 31.25E-9,
-            tau: 2E-3,
+            tau: 3E-3,
         };
 
         LatticeParams {
