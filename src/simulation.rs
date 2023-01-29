@@ -112,6 +112,19 @@ impl Simulation {
         // Fill the texture
         self.texture_pass(frame_num, command_encoder);
 
+        // Copy source to destination (lattice and occupancy)
+        command_encoder.copy_buffer_to_buffer(
+            self.lattices[(frame_num as usize + 1) % 2].lattice.buffer(), 0, 
+            self.lattices[frame_num as usize % 2].lattice.buffer(), 0,
+            self.lattices[frame_num as usize % 2].lattice.buffer_size() as u64
+        );
+
+        command_encoder.copy_buffer_to_buffer(
+            self.lattices[(frame_num as usize + 1) % 2].occupancy.buffer(), 0, 
+            self.lattices[frame_num as usize % 2].occupancy.buffer(), 0,
+            self.lattices[frame_num as usize % 2].occupancy.buffer_size() as u64
+        );
+
     }
 
     pub fn prepare_for_gpu(&mut self, 
@@ -636,6 +649,5 @@ impl Simulation {
             cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
             cpass.pop_debug_group();
         }        
-
     }
 }

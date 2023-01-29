@@ -9,7 +9,7 @@ use crate::{
     uniforms::UniformBuffer, lattice_params::Params
 };
 
-pub struct Renderer {
+pub struct Render {
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
     index_count: usize,
@@ -124,7 +124,7 @@ const INDICES: &[u16] = &[
 
 
 
-impl Renderer {
+impl Render {
 
     pub fn new(
         uniform_buffer: &UniformBuffer,
@@ -288,7 +288,7 @@ impl Renderer {
         println!("Instances: {}", instances.len());
 
         // Done.
-        Renderer {
+        Render {
             vertex_buf: vertex_buf,
             index_buf: index_buf,
             index_count: INDICES.len(),
