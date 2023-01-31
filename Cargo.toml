@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [[example]]
 name = "easy"
-path = "bin/example_app.rs"
+path = "examples/example_app.rs"
 
 
 [dependencies]
