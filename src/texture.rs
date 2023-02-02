@@ -1,5 +1,3 @@
-use crate::lattice_params::{Params};
-
 pub struct Texture {
     pub texture_view: wgpu::TextureView,
     format: wgpu::TextureFormat,
@@ -8,21 +6,38 @@ pub struct Texture {
 impl Texture {
     // This is important: https://www.w3.org/TR/WGSL/#storage-texel-formats
     pub fn new(
-        lattice_params: &Params,
+        dims: &[u32],
         device: &wgpu::Device,
     ) -> Self {
+
+        let (size, dimension) = match dims.len() {
+            1 => (wgpu::Extent3d {
+                    width: dims[0],
+                    height: 1,
+                    depth_or_array_layers: 1,
+                }, wgpu::TextureDimension::D1),
+            2 => (wgpu::Extent3d {
+                    width: dims[0],
+                    height: dims[1],
+                    depth_or_array_layers: 1,
+                }, wgpu::TextureDimension::D2),
+            3 => (wgpu::Extent3d {
+                    width: dims[0],
+                    height: dims[1],
+                    depth_or_array_layers: dims[2],
+                }, wgpu::TextureDimension::D3),
+            _ => panic!("Invalid dimensions"),
+        };
+
+
         // TODO: I don't know if this is a good format. Leave it for now.
         let format = wgpu::TextureFormat::R32Float;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
-            size: wgpu::Extent3d {
-                width: lattice_params.x_res,
-                height: lattice_params.y_res,
-                depth_or_array_layers: lattice_params.z_res,
-            },
+            size: size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D3,
+            dimension:dimension,
             format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING 
             | wgpu::TextureUsages::COPY_DST 

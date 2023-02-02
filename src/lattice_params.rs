@@ -32,15 +32,15 @@ pub struct LatticeParams {
 
 impl LatticeParams {
     pub fn new(
-        dimensions: Vec<f32>, resolution: Vec<usize>,
+        dimensions: Vec<f32>, resolution: [u32; 3],
     ) -> Self {
         let lattice_params = Params {
             x: dimensions[0],
             y: dimensions[1],
             z: dimensions[2],
-            x_res: resolution[0] as u32,
-            y_res: resolution[1] as u32,
-            z_res: resolution[2] as u32,
+            x_res: resolution[0],
+            y_res: resolution[1],
+            z_res: resolution[2],
             max_particles_site: MAX_PARTICLES_SITE as u32,
             n_regions: 1,
             lambda: 31.25E-9,
