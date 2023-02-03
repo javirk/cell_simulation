@@ -11,6 +11,7 @@ use crate::{
     preprocessor::ShaderBuilder,
     cme::CME,
     reactions_params::ReactionParams,
+    statistics::StatisticsGroup
 };
 
 pub struct Simulation {
@@ -20,6 +21,7 @@ pub struct Simulation {
     bind_groups: Vec<wgpu::BindGroup>,
     pub lattices: Vec<Lattice>,
     pub lattice_params: LatticeParams,
+    statistics: Option<StatisticsGroup>,
     regions: Regions,
     diffusion_matrix: Tensor3<f32>,
     stoichiometry_matrix: Tensor2<i32>,
@@ -78,7 +80,8 @@ impl Simulation {
             reactions_idx,
             reaction_rates,
             reaction_params,
-            texture_compute_pipeline: None
+            texture_compute_pipeline: None,
+            statistics: None
         }
         
     }
@@ -94,6 +97,7 @@ impl Simulation {
                 &self.bind_groups[0],
                 &self.bind_groups[1 + (frame_num as usize % 2)],
                 &self.bind_groups[3],
+                &self.statistics.as_ref().expect("").bind_group,
                 command_encoder, 
                 &self.lattice_params.lattice_params
             );
@@ -105,6 +109,7 @@ impl Simulation {
                 &self.bind_groups[0],
                 &self.bind_groups[1 + (frame_num as usize % 2)],
                 &self.bind_groups[3],
+                &self.statistics.as_ref().expect("").bind_group,
                 command_encoder,
                 &self.lattice_params.lattice_params
             );
@@ -186,6 +191,8 @@ impl Simulation {
         );
 
         self.bind_groups = bind_groups;
+
+        self.statistics = Some(StatisticsGroup::new(&self.reaction_params, &device));
         
     }
 
@@ -645,6 +652,7 @@ impl Simulation {
             cpass.set_pipeline(&self.texture_compute_pipeline.as_ref().expect(""));
             cpass.set_bind_group(0, &self.bind_groups[0], &[]);
             cpass.set_bind_group(1, &self.bind_groups[1 + (frame_num as usize % 2)], &[]);
+            //cpass.set_bind_group(2, &self.statistics.as_ref().expect("").bind_group, &[]);
             cpass.insert_debug_marker("Dispatching texture pass");
             cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
             cpass.pop_debug_group();

@@ -1,24 +1,23 @@
 use crate::{
     texture::Texture,
-    reactions_params::ReactionsParams,
+    reactions_params::ReactionParams,
 };
 
-struct StatisticsBindGroup {
-    bind_group: wgpu::BindGroup,
-    bind_group_layout: wgpu::BindGroupLayout,
-    textures: Vec<Texture>,  // Or maybe a dict?
+pub struct StatisticsGroup {
+    pub bind_group: wgpu::BindGroup,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub textures: Vec<Texture>,  // Or maybe a dict?
 }
 
 impl StatisticsGroup {
     pub fn new(
-        reactions_params: &ReactionsParams,
+        reactions_params: &ReactionParams,
         device: &wgpu::Device,
     ) -> Self {
         let textures = vec![
-            Texture::new([reactions_params.num_reactions], device)
+            Texture::new(&[reactions_params.raw_params.num_reactions], device)
         ];
         
-
         // Should be a for loop over the textures to create the entries
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Statistics Bind Group Layout"),
@@ -38,7 +37,7 @@ impl StatisticsGroup {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: concentrations_texture.binding_resource(),
+                    resource: textures[0].binding_resource(),
                 },
             ],
         });

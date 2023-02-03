@@ -23,6 +23,8 @@ struct Lattice {
 @group(2) @binding(2) var <storage, read> reactions_idx: array<i32>;
 @group(2) @binding(3) var <storage, read> reaction_rates: array<f32>;
 
+// Statistics bindings
+@group(3) @binding(0) var concentrations_stat: texture_storage_1d<r32float, read_write>;
 
 @compute @workgroup_size(1, 1, 1)
 fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -73,6 +75,8 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let idx_reaction = i32(i * (reaction_params.num_species + 1u));
         for (var idx_species = 1; idx_species <= i32(reaction_params.num_species); idx_species += 1) {
             concentrations[idx_concentration + idx_species] += stoichiometry[idx_reaction + idx_species];
+            // The following MUST be an atomic operation
+            concentrations_stat[idx_species] += stoichiometry[idx_reaction + idx_species];
             // Now update the lattice:
             // Look at the concentration of the species in the site and write 
             var cc: i32 = concentrations[idx_concentration + idx_species];

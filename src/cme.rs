@@ -47,6 +47,7 @@ impl CME {
         data_bind_group: &wgpu::BindGroup,
         lattice_bind_group: &wgpu::BindGroup,
         simulation_bind_group: &wgpu::BindGroup,
+        statistics_bind_group: &wgpu::BindGroup,
         command_encoder: &mut wgpu::CommandEncoder,
         params: &Params,
     ) {
@@ -68,6 +69,7 @@ impl CME {
             cpass.set_bind_group(0, data_bind_group, &[]);
             cpass.set_bind_group(1, lattice_bind_group, &[]);
             cpass.set_bind_group(2, simulation_bind_group, &[]);
+            cpass.set_bind_group(3, statistics_bind_group, &[]);
             cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
         }        
     }

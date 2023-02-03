@@ -23,3 +23,4 @@ mod uniforms;
 mod cme;
 mod reactions_params;
 mod setup;
+mod statistics;

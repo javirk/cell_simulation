@@ -5,6 +5,9 @@
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<u32>;
 @group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
 
+// Statistics bindings
+//@group(2) @binding(0) var concentrations: texture_storage_1d<r32float, read_write>;
+
 
 @compute @workgroup_size(1, 1, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
