@@ -1,6 +1,10 @@
-use tensor_wgpu::{Tensor2, Tensor3};
+use std::collections::{VecDeque, HashMap};
+use futures::Future;
+use futures::*;
+
+use tensor_wgpu::{Tensor2, Tensor3, Tensor1};
 use wgpu::{util::DeviceExt};
-use ndarray::prelude::*;
+use ndarray::{prelude::*, StrideShape};
 use crate::{
     rdme::RDME, 
     texture::Texture, 
@@ -11,17 +15,23 @@ use crate::{
     preprocessor::ShaderBuilder,
     cme::CME,
     reactions_params::ReactionParams,
-    statistics::StatisticsGroup
+    statistics::{StatisticsGroup, PendingStatisticBuffer, SolverStatisticSample}
 };
 
+
 pub struct Simulation {
-    // Data for the compute shader.
     rdme: Option<RDME>,
     cme: Option<CME>,
     bind_groups: Vec<wgpu::BindGroup>,
     pub lattices: Vec<Lattice>,
     pub lattice_params: LatticeParams,
-    statistics: Option<StatisticsGroup>,
+
+    unused_statistics: Vec<PendingStatisticBuffer>, // this is unused_error_buffers
+    unscheduled_statistics: Vec<PendingStatisticBuffer>, // this is unscheduled_error_readbacks
+    pending_statistics: VecDeque<PendingStatisticBuffer>,  // this is pending_error_readbacks
+    stats: Vec<SolverStatisticSample>,
+    statistics_groups: Option<StatisticsGroup>,
+    
     regions: Regions,
     diffusion_matrix: Tensor3<f32>,
     stoichiometry_matrix: Tensor2<i32>,
@@ -81,7 +91,12 @@ impl Simulation {
             reaction_rates,
             reaction_params,
             texture_compute_pipeline: None,
-            statistics: None
+            statistics_groups: None,
+            unused_statistics: Vec::<PendingStatisticBuffer>::new(),
+            unscheduled_statistics: Vec::<PendingStatisticBuffer>::new(),
+            pending_statistics: VecDeque::<PendingStatisticBuffer>::new(),
+            stats: Vec::<SolverStatisticSample>::new()
+
         }
         
     }
@@ -90,6 +105,7 @@ impl Simulation {
         &mut self,
         frame_num: u32,
         command_encoder: &mut wgpu::CommandEncoder,
+        device: &wgpu::Device
     ) {
         self.rdme.as_ref()
             .expect("RDME must be initialized first")
@@ -97,7 +113,7 @@ impl Simulation {
                 &self.bind_groups[0],
                 &self.bind_groups[1 + (frame_num as usize % 2)],
                 &self.bind_groups[3],
-                &self.statistics.as_ref().expect("").bind_group,
+                &self.statistics_groups.as_ref().expect("").bind_group,
                 command_encoder, 
                 &self.lattice_params.lattice_params
             );
@@ -109,7 +125,7 @@ impl Simulation {
                 &self.bind_groups[0],
                 &self.bind_groups[1 + (frame_num as usize % 2)],
                 &self.bind_groups[3],
-                &self.statistics.as_ref().expect("").bind_group,
+                &self.statistics_groups.as_ref().expect("").bind_group,
                 command_encoder,
                 &self.lattice_params.lattice_params
             );
@@ -129,6 +145,10 @@ impl Simulation {
             self.lattices[frame_num as usize % 2].occupancy.buffer(), 0,
             self.lattices[frame_num as usize % 2].occupancy.buffer_size() as u64
         );
+
+        if frame_num % 100 == 0 {
+            pollster::block_on(self.start_error_buffer_readbacks(device));
+        }
 
     }
 
@@ -170,14 +190,6 @@ impl Simulation {
 
         let bind_group_layouts = self.build_bind_group_layouts(uniform_buffer, texture, device);
 
-        // RDME
-        let rdme = RDME::new(&bind_group_layouts, &device);
-        self.rdme = Some(rdme);
-
-        // CME
-        let cme = CME::new(&bind_group_layouts, &device);
-        self.cme = Some(cme);
-
         // Texture compute pipeline
         let texture_compute_pipeline = self.build_texture_compute_pipeline(&bind_group_layouts, device);
         self.texture_compute_pipeline = Some(texture_compute_pipeline);
@@ -192,11 +204,79 @@ impl Simulation {
 
         self.bind_groups = bind_groups;
 
-        self.statistics = Some(StatisticsGroup::new(&self.reaction_params, &device));
-        
+        self.statistics_groups = Some(self.create_statistics(device));
+
+        // RDME
+        let rdme = RDME::new(&bind_group_layouts, &self.statistics_groups.as_ref().expect(""), &device);
+        self.rdme = Some(rdme);
+
+        // CME
+        let cme = CME::new(&bind_group_layouts, &self.statistics_groups.as_ref().expect(""), &device);
+        self.cme = Some(cme);
+        println!("Finished preparing for gpu");
     }
 
 
+}
+
+// Statistics
+impl Simulation {
+    fn create_statistics(&self, device: &wgpu::Device) -> StatisticsGroup {
+        let lattice_data = &self.lattices[0].concentrations.data;
+        let concentration = lattice_data.sum_axis(Axis(0)).sum_axis(Axis(0)).sum_axis(Axis(0)).to_vec();
+        // I have to do this because I can't use the lattice data directly. I have to copy it to a new vector. TODO: Add functionality to tensor-wgpu
+
+        let mut concentration_tensor = Tensor1::<i32>::from_data(
+            concentration,
+            StrideShape::from((self.reaction_params.raw_params.num_species as usize + 1,))
+        );
+        concentration_tensor.create_buffer(
+            device,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::MAP_READ,
+            Some("Concentration buffer")
+        );
+
+        // Particles to log:
+        let mut hash_concentration = HashMap::new();
+        for particle in self.lattices[0].logging_particles.iter() {
+            hash_concentration.insert(
+                self.lattices[0].particle_names[*particle as usize].clone(), 
+                [
+                    0, // Idx of the bind group (concentration = 0) 
+                    *particle // Padding of the storage buffer. It's 1D, so it equals the idx of the particle
+                ]
+            );
+        }
+        StatisticsGroup::new(vec![concentration_tensor], hash_concentration, device)
+    }
+
+    fn retrieve_new_error_samples(&mut self) {
+        todo!()
+    }
+
+    // Call this once all command
+    pub async fn start_error_buffer_readbacks(&mut self, device: &wgpu::Device) {
+        println!("Starting error buffer readbacks");
+        for (name, data) in self.statistics_groups.as_ref().expect("msg").logging_stats.iter() {
+            let buffer = self.statistics_groups.as_ref().expect("msg").stats[data[0] as usize].buffer.as_ref().expect("msg");
+            let buffer_slice = buffer.slice(..);
+            // Sets the buffer up for mapping, sending over the result of the mapping back to us when it is finished.
+            let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+            buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+
+            device.poll(wgpu::Maintain::Wait);  // Do I need this if I'm using pollster to call this function?
+            receiver.receive().await.unwrap().unwrap();
+        
+            let data_arr = buffer_slice.get_mapped_range();
+            for chunk in data_arr.chunks(16) {
+                println!("{:?}", chunk)
+            }
+            drop(data_arr);
+            buffer.unmap();
+
+            //self.error_buffer_readbacks.insert(name.clone(), buffer_future);
+        }
+    }
 }
 
 // Region and particle methods
@@ -243,7 +323,7 @@ impl Simulation {
         self.lattice_params.lattice_params.n_regions += 1;
     }
 
-    pub fn add_particle(&mut self, name: &str, to_region: &str, count: u32) {
+    pub fn add_particle(&mut self, name: &str, to_region: &str, count: u32, logging: bool) {
         // Add particles to the simulation. It will be added to the region specified by to_region
         let region_idx = self.regions.names.iter().position(|x| x == to_region).unwrap() as usize;
         let particle_idx = self.lattices[0].particle_names.len() as Particle;
@@ -262,6 +342,9 @@ impl Simulation {
         // Add one column to stoichiometry matrix.
         self.stoichiometry_matrix.enlarge_dimension(1, 0);
         self.reaction_params.raw_params.num_species += 1;
+        if logging {
+            self.lattices[0].logging_particles.push(particle_idx);
+        }
     }
 
 

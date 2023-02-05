@@ -59,16 +59,16 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     
     let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(vec![1., 1., 1.,], lattice_resolution);
-    let texture = Texture::new(&lattice_resolution, &device);
+    let texture = Texture::new(&lattice_resolution, false, &device);
     
     let mut simulation = Simulation::new(simulation_params);
     let renderer = Render::new(&uniform_buffer, &texture, &simulation.lattice_params.lattice_params, &render_params, &state.config, device);
 
     simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.5E-14);
     // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
-    simulation.add_particle("p1", "one", 200);
-    simulation.add_particle("p2", "one", 200);
-    simulation.add_particle("p3", "one", 0);
+    simulation.add_particle("p1", "one", 200, true);
+    simulation.add_particle("p2", "one", 200, false);
+    simulation.add_particle("p3", "one", 0, true);
 
     //simulation.add_reaction(vec!["p1"], vec!["p2"], 0.);
     simulation.add_reaction(vec!["p1", "p2"], vec!["p3"], 6.);
@@ -92,7 +92,7 @@ fn step_system(
     let frame_num = simulation.uniform_buffer.data.frame_num;
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-    simulation.simulation.step(frame_num, &mut command_encoder);
+    simulation.simulation.step(frame_num, &mut command_encoder, device);
     mouse_slice = simulation.renderer.render(mouse_slice, &mut command_encoder, &view);
 
     simulation.uniform_buffer.data.frame_num += 1;

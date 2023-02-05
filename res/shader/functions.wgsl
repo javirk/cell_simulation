@@ -18,6 +18,10 @@ struct ReactionParams {
     num_reactions: u32
 }
 
+struct Locks {
+	locks: array<atomic<u32>>,
+};
+
 fn get_index_lattice(id_volume: vec3<u32>, params: LatticeParams) -> i32 {
     return i32((id_volume.x + id_volume.y * params.x_res + id_volume.z * params.x_res * params.y_res) * params.max_particles_site);
 }
@@ -25,3 +29,4 @@ fn get_index_lattice(id_volume: vec3<u32>, params: LatticeParams) -> i32 {
 fn get_index_occupancy(id_volume: vec3<u32>, params: LatticeParams) -> i32 {
     return i32(id_volume.x + id_volume.y * params.x_res + id_volume.z * params.x_res * params.y_res);
 }
+

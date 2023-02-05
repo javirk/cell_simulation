@@ -14,6 +14,7 @@ pub struct Lattice {
     pub concentrations: Tensor4<i32>,
     lattice_params: Params,
     pub particle_names: Vec<String>,
+    pub logging_particles: Vec<Particle>,
 }
 
 impl Lattice {
@@ -35,7 +36,8 @@ impl Lattice {
             occupancy,
             concentrations,
             lattice_params: *params,
-            particle_names
+            particle_names,
+            logging_particles: Vec::new(),
         }
     }
 

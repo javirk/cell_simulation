@@ -1,4 +1,4 @@
-use crate::{lattice_params::Params,preprocessor::ShaderBuilder, WORKGROUP_SIZE};
+use crate::{lattice_params::Params,preprocessor::ShaderBuilder, WORKGROUP_SIZE, statistics::StatisticsGroup};
 
 
 pub struct CME {
@@ -8,6 +8,7 @@ pub struct CME {
 impl CME {
     pub fn new( // Receive bind groups, build compute pipeline. Simulation is responsible for everything else
         bind_group_layouts: &Vec<wgpu::BindGroupLayout>,
+        statistics: &StatisticsGroup,
         device: &wgpu::Device,
     ) -> Self {
         let data_bind_group_layout = &bind_group_layouts[0];
@@ -21,7 +22,7 @@ impl CME {
         let compute_pipeline_layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("CME compute"),
-                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout, reaction_bind_group_layout],
+                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout, reaction_bind_group_layout, &statistics.bind_group_layout],
                 push_constant_ranges: &[],
             }
         );
