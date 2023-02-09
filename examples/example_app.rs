@@ -55,7 +55,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
         1280, // width
     ];
 
-    let lattice_resolution = [64, 64, 1];
+    let lattice_resolution = [2, 1, 1];
     
     let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(vec![1., 1., 1.,], lattice_resolution);
@@ -66,8 +66,8 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 
     simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.5E-14);
     // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
-    simulation.add_particle("p1", "one", 200, true);
-    simulation.add_particle("p2", "one", 200, false);
+    simulation.add_particle("p1", "one", 5, true);
+    simulation.add_particle("p2", "one", 10, false);
     simulation.add_particle("p3", "one", 0, true);
 
     //simulation.add_reaction(vec!["p1"], vec!["p2"], 0.);

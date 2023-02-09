@@ -268,9 +268,12 @@ impl Simulation {
             receiver.receive().await.unwrap().unwrap();
         
             let data_arr = buffer_slice.get_mapped_range();
-            for chunk in data_arr.chunks(16) {
-                println!("{:?}", chunk)
+            // data_arr has as many elements as the buffer size = len * size_of::<i32>. So 4 spaces per number. How do I get the final number?
+
+            for chunk in data_arr.chunks(4) { // Because it's 4 bytes per number
+                println!("{:?}", u32::from_ne_bytes(chunk.try_into().unwrap()));
             }
+            println!("------------------");
             drop(data_arr);
             buffer.unmap();
 
@@ -337,7 +340,7 @@ impl Simulation {
 
         // Update the diffusion matrix
         self.diffusion_matrix.copy_dimension(2);
-        println!("Particle {} added. New diffusion matrix: {}", name, self.diffusion_matrix);
+        println!("Particle {} added. New concentration matrix: {}", name, self.lattices[0].concentrations);
 
         // Add one column to stoichiometry matrix.
         self.stoichiometry_matrix.enlarge_dimension(1, 0);

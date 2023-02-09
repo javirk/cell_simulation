@@ -70,7 +70,6 @@ impl Lattice {
                 }
             }
         }
-        println!("Occupancy: {}", self.occupancy);
     }
 
 
