@@ -1,4 +1,4 @@
-use std::{time::{SystemTime, UNIX_EPOCH}, env};
+use std::{time::{SystemTime, UNIX_EPOCH}, env, collections::{HashMap, VecDeque}};
 use winit::{
     event::{self, Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, MouseScrollDelta},
     event_loop::{ControlFlow, EventLoop, },
@@ -40,6 +40,46 @@ struct CellSimulation {
     simulation: Simulation,
     renderer: Render,
     uniform_buffer: UniformBuffer,
+    all_stats: HashMap<String, StatisticContaner>
+}
+
+#[derive(Debug)]
+struct StatisticContaner {
+    x: VecDeque<u32>,
+    y: VecDeque<f32>,  // Must be f32 for the UI
+
+}
+
+impl StatisticContaner {
+
+    fn new(capacity: usize) -> Self {
+        StatisticContaner { x: VecDeque::with_capacity(capacity), y: VecDeque::with_capacity(capacity) }
+    }
+
+    fn add(&mut self, x: u32, y: f32) {
+        while self.x.capacity() == self.x.len() {
+            self.x.pop_front();
+            self.y.pop_front();
+        }
+        self.x.push_back(x);
+        self.y.push_back(y);
+    }
+
+    fn mean(&self) -> f32 {
+        let mut sum = 0.;
+        for y in &self.y {
+            sum += y;
+        }
+        sum / self.y.len() as f32
+    }
+}
+
+fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContaner> {
+    let mut all_stats = HashMap::new();
+    for metric in metrics_log {
+        all_stats.insert(metric.to_string(), StatisticContaner::new(100));
+    }
+    all_stats
 }
 
 
@@ -55,7 +95,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
         1280, // width
     ];
 
-    let lattice_resolution = [2, 1, 1];
+    let lattice_resolution = [64, 64, 64];
     
     let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(vec![1., 1., 1.,], lattice_resolution);
@@ -66,19 +106,22 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 
     simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.5E-14);
     // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
-    simulation.add_particle("p1", "one", 5, true);
-    simulation.add_particle("p2", "one", 10, false);
+    simulation.add_particle("p1", "one", 500, true);
+    simulation.add_particle("p2", "one", 500, false);
     simulation.add_particle("p3", "one", 0, true);
 
     //simulation.add_reaction(vec!["p1"], vec!["p2"], 0.);
     simulation.add_reaction(vec!["p1", "p2"], vec!["p3"], 6.);
 
     simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
+
+    let stats_container = make_all_stats(vec!["p1", "p3"]);
     
     CellSimulation {
         simulation,
         renderer,
         uniform_buffer: uniform_buffer,
+        all_stats: stats_container
     }
 }
 
@@ -192,8 +235,20 @@ pub async fn run() {
                     .prepare_frame(imgui.io_mut(), &state.window)
                     .expect("Failed to prepare frame");
 
+                let view = frame
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                
+                slice_wheel = step_system(&mut simulation, slice_wheel, &view, &state.device, &state.queue);
+                {
+                    while let Some(sample) = simulation.simulation.stats.pop_front() {
+                        //simulation.all_stats[&sample.name].add(sample.iteration_count, sample.value);
+                        simulation.all_stats.entry(sample.name).and_modify(|k| k.add(sample.iteration_count, sample.value as f32));
+                        //my_map.entry("a").and_modify(|k| *k += 10);
+                    }
+                }
+
                 let ui = imgui.frame();
-                // FPS
                 {   
                     let display_size = ui.io().display_size;
                     let window = ui.window("Information");
@@ -204,20 +259,16 @@ pub async fn run() {
                             ui.text(format!("FPS: {:.1}", fps));
                             ui.text(format!("Slice: {}", slice_wheel));
                             // TODO: Add concentration plot and a way to choose the species
-                            ui.plot_lines("A plot", &[0.0, 0.6, 0.5, 0.4, 0.7, 0.4, 0.5, 0.6, 0.0])
-                                .graph_size([200.0, 80.0])
-                                .build();
+                            for (name, stat) in simulation.all_stats.iter() {
+                                ui.text(format!("{}: {}", name, stat.mean()));
+                                ui.plot_lines(name, &stat.y.as_slices().0)
+                                    .graph_size([200.0, 80.0])
+                                    .build();
+                            }
                         });
                     
                     //ui.show_metrics_window(&mut true);
                 }
-
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                
-                // Render the background
-                slice_wheel = step_system(&mut simulation, slice_wheel, &view, &state.device, &state.queue);
 
                 let mut encoder: wgpu::CommandEncoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

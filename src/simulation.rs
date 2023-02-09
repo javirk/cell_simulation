@@ -15,7 +15,8 @@ use crate::{
     preprocessor::ShaderBuilder,
     cme::CME,
     reactions_params::ReactionParams,
-    statistics::{StatisticsGroup, PendingStatisticBuffer, SolverStatisticSample}
+    statistics::{StatisticsGroup, SolverStatisticSample},
+    debug_println
 };
 
 
@@ -26,10 +27,7 @@ pub struct Simulation {
     pub lattices: Vec<Lattice>,
     pub lattice_params: LatticeParams,
 
-    unused_statistics: Vec<PendingStatisticBuffer>, // this is unused_error_buffers
-    unscheduled_statistics: Vec<PendingStatisticBuffer>, // this is unscheduled_error_readbacks
-    pending_statistics: VecDeque<PendingStatisticBuffer>,  // this is pending_error_readbacks
-    stats: Vec<SolverStatisticSample>,
+    pub stats: VecDeque<SolverStatisticSample<i32>>,
     statistics_groups: Option<StatisticsGroup>,
     
     regions: Regions,
@@ -92,10 +90,7 @@ impl Simulation {
             reaction_params,
             texture_compute_pipeline: None,
             statistics_groups: None,
-            unused_statistics: Vec::<PendingStatisticBuffer>::new(),
-            unscheduled_statistics: Vec::<PendingStatisticBuffer>::new(),
-            pending_statistics: VecDeque::<PendingStatisticBuffer>::new(),
-            stats: Vec::<SolverStatisticSample>::new()
+            stats: VecDeque::<SolverStatisticSample<i32>>::new()
 
         }
         
@@ -147,7 +142,7 @@ impl Simulation {
         );
 
         if frame_num % 100 == 0 {
-            pollster::block_on(self.start_error_buffer_readbacks(device));
+            pollster::block_on(self.start_error_buffer_readbacks(device, frame_num));
         }
 
     }
@@ -213,7 +208,7 @@ impl Simulation {
         // CME
         let cme = CME::new(&bind_group_layouts, &self.statistics_groups.as_ref().expect(""), &device);
         self.cme = Some(cme);
-        println!("Finished preparing for gpu");
+        debug_println!("Finished preparing for gpu");
     }
 
 
@@ -250,14 +245,10 @@ impl Simulation {
         StatisticsGroup::new(vec![concentration_tensor], hash_concentration, device)
     }
 
-    fn retrieve_new_error_samples(&mut self) {
-        todo!()
-    }
 
-    // Call this once all command
-    pub async fn start_error_buffer_readbacks(&mut self, device: &wgpu::Device) {
-        println!("Starting error buffer readbacks");
+    pub async fn start_error_buffer_readbacks(&mut self, device: &wgpu::Device, frame_num: u32) {
         for (name, data) in self.statistics_groups.as_ref().expect("msg").logging_stats.iter() {
+            let padding = data[1] as usize;
             let buffer = self.statistics_groups.as_ref().expect("msg").stats[data[0] as usize].buffer.as_ref().expect("msg");
             let buffer_slice = buffer.slice(..);
             // Sets the buffer up for mapping, sending over the result of the mapping back to us when it is finished.
@@ -269,15 +260,18 @@ impl Simulation {
         
             let data_arr = buffer_slice.get_mapped_range();
             // data_arr has as many elements as the buffer size = len * size_of::<i32>. So 4 spaces per number. How do I get the final number?
+            let val = i32::from_ne_bytes(data_arr[padding * 4..padding*4 + 4].try_into().unwrap());
 
-            for chunk in data_arr.chunks(4) { // Because it's 4 bytes per number
-                println!("{:?}", u32::from_ne_bytes(chunk.try_into().unwrap()));
-            }
-            println!("------------------");
+            self.stats.push_back(
+                SolverStatisticSample {
+                    name: name.clone(),
+                    value: val,
+                    iteration_count: frame_num
+                }
+            );
+
             drop(data_arr);
             buffer.unmap();
-
-            //self.error_buffer_readbacks.insert(name.clone(), buffer_future);
         }
     }
 }

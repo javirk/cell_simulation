@@ -1,18 +1,11 @@
 use tensor_wgpu::Tensor1;
-use futures::Future;
-use std::{pin::Pin, collections::HashMap};
+use std::{collections::HashMap};
 
-pub struct PendingStatisticBuffer {
-    pub copy_operation: Option<Pin<Box<dyn Future<Output = std::result::Result<(), wgpu::BufferAsyncError>>>>>,
-    pub buffer: wgpu::Buffer,
-    padding: i32,
-    resulting_sample: SolverStatisticSample,
-}
-
-#[derive(Default, Copy, Clone)]
-pub struct SolverStatisticSample {
-    pub value: f32,
-    pub iteration_count: i32,
+#[derive(Default, Clone)]
+pub struct SolverStatisticSample<T> {
+    pub name: String,
+    pub value: T,
+    pub iteration_count: u32,
 }
 
 pub struct StatisticsGroup {

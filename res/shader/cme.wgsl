@@ -79,7 +79,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
             // Now update the lattice:
             // Look at the concentration of the species in the site and write 
-            var cc: i32 =   
+            var cc: i32 = concentrations[idx_concentration + idx_species];
             while (cc > 0) {
                 latticeDest.lattice[idx_lattice + j_lattice] = u32(idx_species);
                 cc -= 1;
