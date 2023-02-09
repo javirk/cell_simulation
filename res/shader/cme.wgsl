@@ -28,7 +28,7 @@ struct Lattice {
 @compute @workgroup_size(1, 1, 1)
 fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Solve CME with Gillespie algorithm
-    let idx_concentration: i32 = get_index_occupancy(global_id, params) * i32(reaction_params.num_species);
+    let idx_concentration: i32 = get_index_occupancy(global_id, params) * i32(reaction_params.num_species + 1u);
 
     concentrations[idx_concentration] = 1; // I make it 1 so that it doesn't interfere later for the propensity
     // If reactions_idx[i] == 0 --> concentration[0] = 1 --> It doesn't limit the propensity of the reaction
@@ -53,7 +53,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     }
 
-    // 1. Generate random and calculate tau
+    // 1. Generate random
     // 2. Find next reaction with the propensity vector
     // 3. Perform reaction: I need to know where the different species are. That means another loop or save them in the previous one
     var state: u32 = Hash_Wang(unif.itime + global_id.x * global_id.y + global_id.z);
@@ -67,6 +67,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         while (rand_number > cumm_propensity[i]) {
             i += 1u;
         }
+        // i = 1u;
 
         // Loop the stoichiometry matrix row and apply it to the concentrations vector. Update the lattice at the same time
         let idx_lattice = u32(get_index_lattice(global_id, params));
@@ -78,7 +79,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
             // Now update the lattice:
             // Look at the concentration of the species in the site and write 
-            var cc: i32 = concentrations[idx_concentration + idx_species];
+            var cc: i32 =   
             while (cc > 0) {
                 latticeDest.lattice[idx_lattice + j_lattice] = u32(idx_species);
                 cc -= 1;
