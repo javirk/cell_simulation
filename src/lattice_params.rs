@@ -11,44 +11,36 @@ use crate::MAX_PARTICLES_SITE;
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Params {
     // x, y, z are measurements. Making this a vector would be more elegant. TODO
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub x_res : u32,
-    pub y_res: u32,
-    pub z_res: u32,
+    pub dims: [f32; 3],
+    pub res: [u32; 3],
     max_particles_site: u32,
     pub n_regions: u32,
     lambda: f32, // I hope this only depends on the lattice constants.
-    tau: f32,
+    pub tau: f32,
 }
 
 // ---------------------------------------------------------------------------
 
 pub struct LatticeParams {
-    pub lattice_params: Params,
+    pub raw: Params,
     param_buf: Option<wgpu::Buffer>,
 }
 
 impl LatticeParams {
     pub fn new(
-        dimensions: Vec<f32>, resolution: [u32; 3],
+        dimensions: [f32; 3], resolution: [u32; 3], tau: f32, lambda: f32,
     ) -> Self {
         let lattice_params = Params {
-            x: dimensions[0],
-            y: dimensions[1],
-            z: dimensions[2],
-            x_res: resolution[0],
-            y_res: resolution[1],
-            z_res: resolution[2],
+            dims: dimensions,
+            res: resolution,
             max_particles_site: MAX_PARTICLES_SITE as u32,
             n_regions: 1,
-            lambda: 31.25E-9,
-            tau: 3E-3,
+            lambda: lambda,
+            tau: tau
         };
 
         LatticeParams {
-            lattice_params,
+            raw: lattice_params,
             param_buf: None,
         }
     }
@@ -56,13 +48,13 @@ impl LatticeParams {
     pub fn create_buffer(&mut self, device: &wgpu::Device) {
         self.param_buf = Some(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("parameters buffer"),
-            contents: bytemuck::bytes_of(&self.lattice_params),
+            contents: bytemuck::bytes_of(&self.raw),
             usage: wgpu::BufferUsages::UNIFORM,
         }));
     }
 
     pub fn dimensions(&self) -> usize {
-        (self.lattice_params.x_res * self.lattice_params.y_res * self.lattice_params.z_res) as usize
+        (self.raw.res[0] * self.raw.res[1] * self.raw.res[2]) as usize
     }
 
     pub fn binding_resource(&self) -> wgpu::BindingResource {
@@ -80,6 +72,6 @@ impl LatticeParams {
 
 impl Params {
     pub fn dimensions(&self) -> usize {
-        (self.x_res * self.y_res * self.z_res) as usize
+        (self.res[0] * self.res[1] * self.res[2]) as usize
     }
 }

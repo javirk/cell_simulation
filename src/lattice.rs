@@ -21,9 +21,9 @@ impl Lattice {
     pub fn new(
         params: &Params,
     ) -> Self {
-        let shape_3d = (params.x_res as usize, params.y_res as usize, params.z_res as usize).f();
-        let shape_lattice = (params.x_res as usize, params.y_res as usize, params.z_res as usize, MAX_PARTICLES_SITE as usize).f();
-        let shape_concentrations = (params.x_res as usize, params.y_res as usize, params.z_res as usize, 1).f();
+        let shape_3d = (params.res[0] as usize, params.res[1] as usize, params.res[2] as usize).f();
+        let shape_lattice = (params.res[0] as usize, params.res[1] as usize, params.res[2] as usize, MAX_PARTICLES_SITE as usize).f();
+        let shape_concentrations = (params.res[0] as usize, params.res[1] as usize, params.res[2] as usize, 1).f();
 
         let particle_names: Vec<String> = vec![String::from("void")];
 
@@ -74,7 +74,7 @@ impl Lattice {
 
 
     fn add_particle_site(&mut self, x: f32, y: f32, z: f32, particle: Particle) -> Result<String, String> {
-        let res = (self.lattice_params.x_res as usize, self.lattice_params.y_res as usize, self.lattice_params.z_res as usize);
+        let res = (self.lattice_params.res[0] as usize, self.lattice_params.res[1] as usize, self.lattice_params.res[2] as usize);
 
         let x_lattice = (x * res.0 as f32) as usize;  // "as usize" already floors the number, so ok.
         let y_lattice = (y * res.1 as f32) as usize;

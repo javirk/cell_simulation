@@ -55,7 +55,7 @@ impl Simulation {
         // A simulation has a lattice first
         let mut lattices = Vec::<Lattice>::new();
         for _ in 0..2 {
-            lattices.push(Lattice::new(&lattice_params.lattice_params))
+            lattices.push(Lattice::new(&lattice_params.raw))
         }
 
         let regions = Regions {
@@ -110,7 +110,7 @@ impl Simulation {
                 &self.bind_groups[3],
                 &self.statistics_groups.as_ref().expect("").bind_group,
                 command_encoder, 
-                &self.lattice_params.lattice_params
+                &self.lattice_params.raw
             );
 
         // cme step
@@ -122,7 +122,7 @@ impl Simulation {
                 &self.bind_groups[3],
                 &self.statistics_groups.as_ref().expect("").bind_group,
                 command_encoder,
-                &self.lattice_params.lattice_params
+                &self.lattice_params.raw
             );
 
         // Fill the texture
@@ -141,7 +141,7 @@ impl Simulation {
             self.lattices[frame_num as usize % 2].occupancy.buffer_size() as u64
         );
 
-        if frame_num % 100 == 0 {
+        if frame_num % 100 == 0 && frame_num > 0 {
             pollster::block_on(self.start_error_buffer_readbacks(device, frame_num));
         }
 
@@ -282,12 +282,12 @@ impl Simulation {
     pub fn add_region(&mut self, name: &str, starting_pos: Vec<f32>, ending_pos: Vec<f32>, default_diffusion_rate: f32) {
         // Add a new region. It will be a rectangle for now. Defined by the starting and ending positions.
         assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
-        let default_transition_rate: f32 = 8.15E-14;
+        let default_transition_rate: f32 = 8.15E-14 / 6.;
         let new_region_idx = self.regions.names.len() as Region;
         self.regions.names.push(String::from(name));
         self.regions.positions.push(vec![starting_pos.clone(), ending_pos.clone()]);
 
-        let res = (self.lattice_params.lattice_params.x_res as usize, self.lattice_params.lattice_params.y_res as usize, self.lattice_params.lattice_params.z_res as usize);
+        let res = (self.lattice_params.raw.res[0] as usize, self.lattice_params.raw.res[1] as usize, self.lattice_params.raw.res[2] as usize);
         let start = (
             (starting_pos[0] * res.0 as f32) as usize,
             (starting_pos[1] * res.1 as f32) as usize,
@@ -317,7 +317,7 @@ impl Simulation {
         }
 
         println!("Region {} added. New diffusion matrix: {}", name, self.diffusion_matrix);
-        self.lattice_params.lattice_params.n_regions += 1;
+        self.lattice_params.raw.n_regions += 1;
     }
 
     pub fn add_particle(&mut self, name: &str, to_region: &str, count: u32, logging: bool) {
@@ -334,7 +334,7 @@ impl Simulation {
 
         // Update the diffusion matrix
         self.diffusion_matrix.copy_dimension(2);
-        println!("Particle {} added. New concentration matrix: {}", name, self.lattices[0].concentrations);
+        // println!("Particle {} added. New concentration matrix: {}", name, self.lattices[0].concentrations);
 
         // Add one column to stoichiometry matrix.
         self.stoichiometry_matrix.enlarge_dimension(1, 0);
@@ -718,11 +718,11 @@ impl Simulation {
     }
 
     fn texture_pass(&self, frame_num: u32, command_encoder: &mut wgpu::CommandEncoder) {
-        let xdim = self.lattice_params.lattice_params.x_res as u32 + WORKGROUP_SIZE.0 - 1;
+        let xdim = self.lattice_params.raw.res[0] as u32 + WORKGROUP_SIZE.0 - 1;
         let xgroups = xdim / WORKGROUP_SIZE.0;
-        let ydim = self.lattice_params.lattice_params.y_res as u32 + WORKGROUP_SIZE.1 - 1;
+        let ydim = self.lattice_params.raw.res[1] as u32 + WORKGROUP_SIZE.1 - 1;
         let ygroups = ydim / WORKGROUP_SIZE.1;
-        let zdim = self.lattice_params.lattice_params.z_res as u32 + WORKGROUP_SIZE.2 - 1;
+        let zdim = self.lattice_params.raw.res[2] as u32 + WORKGROUP_SIZE.2 - 1;
         let zgroups = zdim / WORKGROUP_SIZE.2;
 
         // Main compute pass

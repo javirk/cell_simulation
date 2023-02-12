@@ -72,6 +72,13 @@ impl StatisticContaner {
         }
         sum / self.y.len() as f32
     }
+
+    fn last(&self) -> f32 {
+        match self.y.back() {
+            Some(y) => *y,
+            None => 0.
+        }
+    }
 }
 
 fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContaner> {
@@ -95,27 +102,32 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
         1280, // width
     ];
 
-    let lattice_resolution = [64, 64, 64];
+    let lattice_resolution = [32, 32, 32];
+    let dimensions = [1., 1., 1.];
+    let tau = 3E-3;
+    let lambda = 31.25E-9;
     
     let render_params = RenderParams::new(device, &render_param_data);
-    let simulation_params = LatticeParams::new(vec![1., 1., 1.,], lattice_resolution);
+    let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
     let texture = Texture::new(&lattice_resolution, false, &device);
     
     let mut simulation = Simulation::new(simulation_params);
-    let renderer = Render::new(&uniform_buffer, &texture, &simulation.lattice_params.lattice_params, &render_params, &state.config, device);
+    let renderer = Render::new(&uniform_buffer, &texture, &simulation.lattice_params.raw, &render_params, &state.config, device);
 
-    simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.5E-14);
+    simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14/6.);
     // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
-    simulation.add_particle("p1", "one", 500, true);
-    simulation.add_particle("p2", "one", 500, false);
-    simulation.add_particle("p3", "one", 0, true);
+    simulation.add_particle("A", "one", 1000, true);
+    simulation.add_particle("B", "one", 1000, false);
+    simulation.add_particle("C", "one", 0, false);
+
 
     //simulation.add_reaction(vec!["p1"], vec!["p2"], 0.);
-    simulation.add_reaction(vec!["p1", "p2"], vec!["p3"], 6.);
+    simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
+    simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
 
     simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
 
-    let stats_container = make_all_stats(vec!["p1", "p3"]);
+    let stats_container = make_all_stats(vec!["A"]);
     
     CellSimulation {
         simulation,
@@ -161,7 +173,7 @@ pub async fn run() {
     let mut state = Setup::new(window).await;
 
     let mut last_frame_inst = Instant::now();
-    let (mut frame_count, mut accum_time, mut fps) = (0, 0., 0.);
+    let (mut frame_count, mut accum_time, mut fps, mut time) = (0, 0., 0., 0.);
     //let hidpi_factor = window.scale_factor();
 
     let (mut imgui, platform) = setup_imgui(state.window());
@@ -222,6 +234,7 @@ pub async fn run() {
                         accum_time = 0.0;
                         frame_count = 0;
                     }
+                    time += simulation.simulation.lattice_params.raw.tau;
                 }
 
                 let frame = match state.surface.get_current_texture() {
@@ -257,10 +270,11 @@ pub async fn run() {
                         .position([0.0, 0.0], Condition::Always)
                         .build(|| {
                             ui.text(format!("FPS: {:.1}", fps));
+                            ui.text(format!("Time: {:.3}", time));
                             ui.text(format!("Slice: {}", slice_wheel));
                             // TODO: Add concentration plot and a way to choose the species
                             for (name, stat) in simulation.all_stats.iter() {
-                                ui.text(format!("{}: {}", name, stat.mean()));
+                                ui.text(format!("{}: {}", name, stat.last()));
                                 ui.plot_lines(name, &stat.y.as_slices().0)
                                     .graph_size([200.0, 80.0])
                                     .build();

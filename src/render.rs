@@ -158,10 +158,10 @@ impl Render {
         );
 
         // This creates the instances. All the math is for the translation vector. TODO: Add margins.
-        let lattice_res_f32 = [lattice_params.x_res.clone() as f32, lattice_params.y_res.clone() as f32, lattice_params.z_res.clone() as f32];
+        let lattice_res_f32 = [lattice_params.res[0].clone() as f32, lattice_params.res[1].clone() as f32, lattice_params.res[2].clone() as f32];
         let (width, height) = (render_params.params.width as f32, render_params.params.height as f32);
         let l: f32;
-        if (width / (lattice_params.x * lattice_res_f32[0])) <= (height / (lattice_params.y * lattice_res_f32[1])) {
+        if (width / (lattice_params.dims[0] * lattice_res_f32[0])) <= (height / (lattice_params.dims[1] * lattice_res_f32[1])) {
             // X is the limiting dimension  
             l = width / lattice_res_f32[0];
         } else {
@@ -172,9 +172,9 @@ impl Render {
         let scaling_x = l / width;
         let scaling_y = l / height;
         let left_margin = 200. / width;  // Because of the GUI. Left margin is 200 pixels.
-        let instances = (0..lattice_params.z_res).flat_map(|z| {
-            (0..lattice_params.x_res).flat_map(move |x| {
-                (0..lattice_params.y_res).map(move |y|{
+        let instances = (0..lattice_params.res[2]).flat_map(|z| {
+            (0..lattice_params.res[0]).flat_map(move |x| {
+                (0..lattice_params.res[1]).map(move |y|{
                     let position = cgmath::Vector3 { 
                         x: lattice_res_f32[0] * scaling_x * (1. / lattice_res_f32[0]) * (2. * (x as f32) - lattice_res_f32[0] + 1.) + left_margin,
                         y: lattice_res_f32[1] * scaling_y * (1. / lattice_res_f32[1]) * (2. * (y as f32) - lattice_res_f32[1] + 1.),

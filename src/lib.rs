@@ -6,7 +6,7 @@ pub use uniforms::{Uniform, UniformBuffer};
 pub use render_params::RenderParams;
 pub use texture::Texture;
 
-const MAX_PARTICLES_SITE: usize = 16;
+const MAX_PARTICLES_SITE: usize = 8;
 const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);
 const MAX_REACTIONS: usize = 100;
 

@@ -25,7 +25,7 @@ struct Lattice {
 @group(2) @binding(0) var <storage, read_write> concentrations: array<atomic<i32>>;
 
 
-fn writeLatticeSite(idx_lattice: i32, value: u32) {
+fn writeLatticeSite(idx_lattice: i32, value: u32) -> bool {
     var i = 0;
     let max_particles = i32(params.max_particles_site);
     var success = false;
@@ -33,11 +33,15 @@ fn writeLatticeSite(idx_lattice: i32, value: u32) {
     loop {
         var resValue = atomicCompareExchangeWeak(&(latticeDest.lattice[idx_lattice + i]), 0u, value);
         success = resValue.exchanged;
-        if (success || (i >= max_particles)) {
+        if (success) {
+            return true;
+        }
+        if (i >= max_particles) {
             break;
         }
         i += 1;
     }
+    return false;
 }
 
 
@@ -54,11 +58,16 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
     // First, move particle away. If it doesn't fit, move it back
     let num_particles_dest = atomicAdd(&occupancyDest[idx_occupancy_dest], 1u);
     if num_particles_dest <= params.max_particles_site {
-        writeLatticeSite(idx_lattice_dest, particle);
-        atomicSub(&occupancyDest[idx_occupancy_src], 1u);
-        atomicStore(&latticeDest.lattice[idx_particle], 0u);
-        atomicAdd(&concentrations[idx_concentration_dest], 1);
-        atomicSub(&concentrations[idx_concentration_src], 1);
+        if (writeLatticeSite(idx_lattice_dest, particle)) {
+            // It could be moved
+            atomicSub(&occupancyDest[idx_occupancy_src], 1u);
+            atomicStore(&latticeDest.lattice[idx_particle], 0u);
+            atomicAdd(&concentrations[idx_concentration_dest], 1);
+            atomicSub(&concentrations[idx_concentration_src], 1);
+        } else {
+            // It couldn't be moved
+            atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
+        }
     } else {
         // Particle doesn't fit
         atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
@@ -194,7 +203,7 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var p: array<f32, 7>;
         create_probability_vector(global_id, latticeSrc.lattice[i_part], &p);
 
-        state = Hash_Wang(unif.itime + X + Y + Z + u32(i_part));
+        state = Hash_Wang(unif.itime + X % Y + Z + u32(i_part));
         rand_number = UniformFloat(state);
 
         var i: i32 = 0;
