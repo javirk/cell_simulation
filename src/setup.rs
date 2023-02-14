@@ -4,14 +4,14 @@ use winit::{
 };
 
 pub struct Setup {
-    pub window: winit::window::Window,
+    pub window: Option<winit::window::Window>,
     instance: wgpu::Instance,
-    size: winit::dpi::PhysicalSize<u32>,
-    pub surface: wgpu::Surface,
+    size: Option<winit::dpi::PhysicalSize<u32>>,
+    pub surface: Option<wgpu::Surface>,
     adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub config: wgpu::SurfaceConfiguration,
+    pub config: Option<wgpu::SurfaceConfiguration>,
 }
 
 impl Setup {
@@ -79,23 +79,82 @@ impl Setup {
         surface.configure(&device, &config);
         
         Setup {
-            window,
+            window: Some(window),
             instance,
-            size,
-            surface,
+            size: Some(size),
+            surface: Some(surface),
             adapter,
             device,
             queue,
-            config,
+            config: Some(config),
         }
     }
 
+    pub async fn new_nowindow() -> Self {
+        let mut builder = winit::window::WindowBuilder::new();
+        builder = builder.with_title("Example");
+    
+        log::info!("Initializing the surface...");
+    
+        let backend = wgpu::util::backend_bits_from_env().unwrap_or_else(wgpu::Backends::all);
+    
+        let instance = wgpu::Instance::new(backend);
+    
+        let adapter =
+            wgpu::util::initialize_adapter_from_env_or_default(&instance, backend, None)
+                .await
+                .expect("No suitable GPU adapters found on the system!");
+    
+        {
+            let adapter_info = adapter.get_info();
+            println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
+        }
+    
+        let required_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+        let adapter_features = adapter.features();
+        assert!(
+            adapter_features.contains(required_features),
+            "Adapter does not support required features for this example: {:?}",
+            required_features - adapter_features
+        );
+    
+        // Make sure we use the texture resolution limits from the adapter, so we can support images the size of the surface.
+        let needed_limits = wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits());
+    
+        let trace_dir = std::env::var("WGPU_TRACE");
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    features: (adapter_features) | required_features,
+                    limits: needed_limits,
+                },
+                trace_dir.ok().as_ref().map(std::path::Path::new),
+            )
+            .await
+            .expect("Unable to find a suitable GPU adapter!");
+        
+        Setup {
+            window: None,
+            instance,
+            size: None,
+            surface: None,
+            adapter,
+            device,
+            queue,
+            config: None
+        }
+    }
+
+
+
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
+            self.size = Some(new_size);
+            // I'm sure there's a better way to do this
+            self.config.as_mut().expect("Config expected").width = new_size.width;
+            self.config.as_mut().expect("Config expected").height = new_size.height;
+            self.surface.as_mut().expect("Surface expected").configure(&self.device, &self.config.as_ref().expect("Config expected"));
         }
     }
 
@@ -107,7 +166,15 @@ impl Setup {
     }
 
     pub fn window(&self) -> &Window {
-        &self.window
+        &self.window.as_ref().expect("No window found")
+    }
+
+    pub fn config(&self) -> &wgpu::SurfaceConfiguration {
+        &self.config.as_ref().expect("No config found")
+    }
+
+    pub fn surface(&self) -> &wgpu::Surface {
+        &self.surface.as_ref().expect("No surface found")
     }
      
 }

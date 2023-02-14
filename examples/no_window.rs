@@ -8,51 +8,25 @@ use winit::{
 use std::time::Instant;
 use imgui::*;
 use simulation::{Simulation, Setup, Render, Uniform, UniformBuffer, RenderParams, LatticeParams, Texture};
-use imgui_wgpu::{Renderer, RendererConfig};
 
-
-fn setup_imgui(window: &Window) -> (imgui::Context, imgui_winit_support::WinitPlatform) {
-    let hidpi_factor = window.scale_factor();
-    let mut imgui = imgui::Context::create();
-    let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
-    platform.attach_window(
-        imgui.io_mut(),
-        window,
-        imgui_winit_support::HiDpiMode::Default,
-    );
-    imgui.set_ini_filename(None);
-
-    let font_size = (13.0 * hidpi_factor) as f32;
-    imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
-
-    imgui.fonts().add_font(&[FontSource::DefaultFontData {
-        config: Some(imgui::FontConfig {
-            oversample_h: 1,
-            pixel_snap_h: true,
-            size_pixels: font_size,
-            ..Default::default()
-        }),
-    }]);
-    (imgui, platform)
-}
 
 struct CellSimulation {
     simulation: Simulation,
-    renderer: Render,
     uniform_buffer: UniformBuffer,
-    all_stats: HashMap<String, StatisticContainer>
+    all_stats: HashMap<String, StatisticContaner>
 }
 
 #[derive(Debug)]
-struct StatisticContainer {
+struct StatisticContaner {
     x: VecDeque<u32>,
     y: VecDeque<f32>,  // Must be f32 for the UI
+
 }
 
-impl StatisticContainer {
+impl StatisticContaner {
 
     fn new(capacity: usize) -> Self {
-        StatisticContainer { x: VecDeque::with_capacity(capacity), y: VecDeque::with_capacity(capacity) }
+        StatisticContaner { x: VecDeque::with_capacity(capacity), y: VecDeque::with_capacity(capacity) }
     }
 
     fn add(&mut self, x: u32, y: f32) {
@@ -80,10 +54,10 @@ impl StatisticContainer {
     }
 }
 
-fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer> {
+fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContaner> {
     let mut all_stats = HashMap::new();
     for metric in metrics_log {
-        all_stats.insert(metric.to_string(), StatisticContainer::new(100));
+        all_stats.insert(metric.to_string(), StatisticContaner::new(100));
     }
     all_stats
 }
@@ -111,7 +85,6 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     let texture = Texture::new(&lattice_resolution, false, &device);
     
     let mut simulation = Simulation::new(simulation_params);
-    let renderer = Render::new(&uniform_buffer, &texture, &simulation.lattice_params.raw, &render_params, &state.config(), device);
 
     simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14/6.);
     // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
@@ -130,7 +103,6 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     
     CellSimulation {
         simulation,
-        renderer,
         uniform_buffer: uniform_buffer,
         all_stats: stats_container
     }
@@ -147,7 +119,6 @@ fn step_system(
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
     simulation.simulation.step(frame_num, &mut command_encoder, device);
-    mouse_slice = simulation.renderer.render(mouse_slice, &mut command_encoder, &view);
 
     simulation.uniform_buffer.data.frame_num += 1;
     simulation.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32;
@@ -169,21 +140,10 @@ pub async fn run() {
     });
     window.set_title(&format!("Example"));
 
-    let mut state = Setup::new(window).await;
+    let mut state = Setup::new_nowindow().await;
 
     let mut last_frame_inst = Instant::now();
     let (mut frame_count, mut accum_time, mut fps, mut time) = (0, 0., 0., 0.);
-    //let hidpi_factor = window.scale_factor();
-
-    let (mut imgui, platform) = setup_imgui(state.window());
-
-    let renderer_config = RendererConfig {
-        texture_format: state.config().format,
-        ..Default::default()
-    };
-
-    let mut renderer = Renderer::new(&mut imgui, &state.device, &state.queue, renderer_config);
-
     // Setup the simulation.
     let mut simulation = setup_system(&state, &state.device);
 
@@ -236,7 +196,7 @@ pub async fn run() {
                     time += simulation.simulation.lattice_params.raw.tau;
                 }
 
-                let frame = match state.surface().get_current_texture() {
+                let frame = match state.surface.get_current_texture() {
                     Ok(frame) => frame,
                     Err(e) => {
                         eprintln!("dropped frame: {:?}", e);
@@ -244,7 +204,7 @@ pub async fn run() {
                     }
                 };
                 platform
-                    .prepare_frame(imgui.io_mut(), &state.window())
+                    .prepare_frame(imgui.io_mut(), &state.window)
                     .expect("Failed to prepare frame");
 
                 let view = frame
@@ -269,7 +229,7 @@ pub async fn run() {
                             ui.text(format!("FPS: {:.1}", fps));
                             ui.text(format!("Time: {:.3}", time));
                             ui.text(format!("Slice: {}", slice_wheel));
-                            // TODO: Add a way to choose the species
+                            // TODO: Add concentration plot and a way to choose the species
                             for (name, stat) in simulation.all_stats.iter() {
                                 ui.text(format!("{}: {}", name, stat.last()));
                                 ui.plot_lines(name, &stat.y.as_slices().0)
