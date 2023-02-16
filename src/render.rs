@@ -307,6 +307,8 @@ impl Render {
         view: &wgpu::TextureView,
     ) -> i32 {
 
+        //return 0;
+
         slice = slice.max(0).min(self.lattice_dimensions[2] as i32 - 1);
 
         let instance_step = self.lattice_dimensions[0] as u32 * self.lattice_dimensions[1] as u32;

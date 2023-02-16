@@ -1,13 +1,8 @@
-use std::{time::{SystemTime, UNIX_EPOCH}, env, collections::{HashMap, VecDeque}};
-use winit::{
-    event::{self, Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, MouseScrollDelta},
-    event_loop::{ControlFlow, EventLoop, },
-    window::Window,
-    dpi::LogicalSize,
-};
+use std::{time::{SystemTime, UNIX_EPOCH}, collections::{HashMap, VecDeque}, sync::Arc};
 use std::time::Instant;
-use imgui::*;
-use simulation::{Simulation, Setup, Render, Uniform, UniformBuffer, RenderParams, LatticeParams, Texture};
+use simulation::{Simulation, Setup, Uniform, UniformBuffer, LatticeParams, Texture};
+use std::error::Error;
+use csv::Writer;
 
 
 struct CellSimulation {
@@ -52,6 +47,17 @@ impl StatisticContaner {
             None => 0.
         }
     }
+
+    fn to_csv(&mut self, name: &str)  -> Result<(), Box<dyn Error>> {
+        // TODO: This shouldn't be here.
+        let mut wtr = Writer::from_path(name)?;
+        while let (Some(x), Some(y)) = (self.x.pop_front(), self.y.pop_front()) {
+            wtr.write_record(&[x.to_string(), y.to_string()])?;
+        }
+            
+        wtr.flush()?;
+        Ok(())
+    }
 }
 
 fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContaner> {
@@ -63,24 +69,19 @@ fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContaner> 
 }
 
 
-fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
+fn setup_system(device: &wgpu::Device) -> CellSimulation {
     let uniform = Uniform {
         itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
         frame_num: 0
     };
     let uniform_buffer = UniformBuffer::new(uniform, device);
 
-    let render_param_data: Vec<usize> = vec![
-        720, // height
-        1280, // width
-    ];
-
     let lattice_resolution = [32, 32, 32];
     let dimensions = [1., 1., 1.];
     let tau = 3E-3;
     let lambda = 31.25E-9;
     
-    let render_params = RenderParams::new(device, &render_param_data);
+    //let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
     let texture = Texture::new(&lattice_resolution, false, &device);
     
@@ -92,8 +93,6 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     simulation.add_particle("B", "one", 1000, false);
     simulation.add_particle("C", "one", 0, false);
 
-
-    //simulation.add_reaction(vec!["p1"], vec!["p2"], 0.);
     simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
     simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
 
@@ -110,170 +109,57 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 
 fn step_system(
     simulation: &mut CellSimulation,
-    mut mouse_slice: i32,
-    view: &wgpu::TextureView,
     device: &wgpu::Device,
     queue: &wgpu::Queue
-) -> i32 {
+) {
     let frame_num = simulation.uniform_buffer.data.frame_num;
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
     simulation.simulation.step(frame_num, &mut command_encoder, device);
 
     simulation.uniform_buffer.data.frame_num += 1;
-    simulation.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32;
+    let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u32;
+    assert_ne!(t, simulation.uniform_buffer.data.itime);
+    simulation.uniform_buffer.data.itime = t;
 
     queue.write_buffer(&simulation.uniform_buffer.buffer, 0, bytemuck::cast_slice(&[simulation.uniform_buffer.data]));
     queue.submit(Some(command_encoder.finish()));
-
-    return mouse_slice;
 }
+
 
 pub async fn run() {
     env_logger::init();
 
-    let event_loop = EventLoop::new();
-    let window = Window::new(&event_loop).unwrap();
-    window.set_inner_size(LogicalSize {
-        width: 1280.0,
-        height: 720.0,
-    });
-    window.set_title(&format!("Example"));
-
-    let mut state = Setup::new_nowindow().await;
+    let state = Setup::new_nowindow().await;
 
     let mut last_frame_inst = Instant::now();
     let (mut frame_count, mut accum_time, mut fps, mut time) = (0, 0., 0., 0.);
     // Setup the simulation.
-    let mut simulation = setup_system(&state, &state.device);
+    let mut simulation = setup_system(&state.device);
 
-    let mut slice_wheel: i32 = 0;
-    event_loop.run(move |event, _, control_flow| {
-        match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == state.window().id() => if !state.input(event) {
-                match event {
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        state.resize(*physical_size);
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        state.resize(**new_inner_size);
-                    }
-                    WindowEvent::MouseWheel { delta, .. } => {
-                        match delta {
-                            MouseScrollDelta::LineDelta(_, y) => {
-                                slice_wheel += *y as i32;
-                            },
-                            MouseScrollDelta::PixelDelta(_) => {}
-                        }
-                    }
-                    _ => {}
-                }
+    while time < 10. {
+        step_system(&mut simulation, &state.device, &state.queue);
+
+        {
+            while let Some(sample) = simulation.simulation.stats.pop_front() {
+                //println!("{}: {} {}", sample.name, time, sample.value);
+                println!("FPS: {}\n", fps);
+                simulation.all_stats.entry(sample.name).and_modify(|k| k.add(sample.iteration_count, sample.value as f32));
             }
-            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
-                // Main part
-                {
-                    accum_time += last_frame_inst.elapsed().as_secs_f32();
-                    last_frame_inst = Instant::now();
-                    frame_count += 1;
-                    if frame_count == 100 {
-                        fps = frame_count as f32 / accum_time;
-                        accum_time = 0.0;
-                        frame_count = 0;
-                    }
-                    time += simulation.simulation.lattice_params.raw.tau;
-                }
-
-                let frame = match state.surface.get_current_texture() {
-                    Ok(frame) => frame,
-                    Err(e) => {
-                        eprintln!("dropped frame: {:?}", e);
-                        return;
-                    }
-                };
-                platform
-                    .prepare_frame(imgui.io_mut(), &state.window)
-                    .expect("Failed to prepare frame");
-
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                
-                slice_wheel = step_system(&mut simulation, slice_wheel, &view, &state.device, &state.queue);
-                {
-                    while let Some(sample) = simulation.simulation.stats.pop_front() {
-                        simulation.all_stats.entry(sample.name).and_modify(|k| k.add(sample.iteration_count, sample.value as f32));
-                    }
-                }
-
-                let ui = imgui.frame();
-                {   
-                    let display_size = ui.io().display_size;
-                    let window = ui.window("Information");
-                    window
-                        .size([200.0, display_size[1]], Condition::Always)
-                        .position([0.0, 0.0], Condition::Always)
-                        .build(|| {
-                            ui.text(format!("FPS: {:.1}", fps));
-                            ui.text(format!("Time: {:.3}", time));
-                            ui.text(format!("Slice: {}", slice_wheel));
-                            // TODO: Add concentration plot and a way to choose the species
-                            for (name, stat) in simulation.all_stats.iter() {
-                                ui.text(format!("{}: {}", name, stat.last()));
-                                ui.plot_lines(name, &stat.y.as_slices().0)
-                                    .graph_size([200.0, 80.0])
-                                    .build();
-                            }
-                        });
-                    
-                    //ui.show_metrics_window(&mut true);
-                }
-
-                let mut encoder: wgpu::CommandEncoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load, // Do not clear
-                            // load: wgpu::LoadOp::Clear(clear_color),
-                            store: true,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                });
-                
-                renderer
-                    .render(imgui.render(), &state.queue, &state.device, &mut rpass)
-                    .expect("Rendering failed");
-                    
-                drop(rpass);
-
-                state.queue.submit(Some(encoder.finish()));
-
-                frame.present();
+            accum_time += last_frame_inst.elapsed().as_secs_f32();
+            last_frame_inst = Instant::now();
+            frame_count += 1;
+            if frame_count == 100 {
+                fps = frame_count as f32 / accum_time;
+                accum_time = 0.0;
+                frame_count = 0;
             }
-            Event::RedrawEventsCleared => {
-                // RedrawRequested will only trigger once, unless we manually
-                // request it.
-                state.window().request_redraw();
-            }
-            _ => {}
         }
-    });
+
+        time += simulation.simulation.lattice_params.raw.tau;
+    }
+
+    simulation.all_stats.get_mut("A").unwrap().to_csv("A.csv").unwrap();
 }
 
 fn main() {

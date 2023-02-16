@@ -335,3 +335,4 @@ ASALocalRun/
 /target
 launch.json
 debugging_captures
+*.csv

@@ -150,7 +150,7 @@ fn step_system(
     mouse_slice = simulation.renderer.render(mouse_slice, &mut command_encoder, &view);
 
     simulation.uniform_buffer.data.frame_num += 1;
-    simulation.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32;
+    simulation.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u32;
 
     queue.write_buffer(&simulation.uniform_buffer.buffer, 0, bytemuck::cast_slice(&[simulation.uniform_buffer.data]));
     queue.submit(Some(command_encoder.finish()));
@@ -278,7 +278,7 @@ pub async fn run() {
                             }
                         });
                     
-                    //ui.show_metrics_window(&mut true);
+                    // ui.show_metrics_window(&mut true);
                 }
 
                 let mut encoder: wgpu::CommandEncoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });

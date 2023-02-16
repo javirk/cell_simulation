@@ -203,7 +203,7 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var p: array<f32, 7>;
         create_probability_vector(global_id, latticeSrc.lattice[i_part], &p);
 
-        state = Hash_Wang(unif.itime + X % Y + Z + u32(i_part));
+        state = PCG(unif.itime + X % Y + Z + u32(i_part));
         rand_number = UniformFloat(state);
 
         var i: i32 = 0;

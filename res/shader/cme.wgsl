@@ -56,7 +56,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // 1. Generate random
     // 2. Find next reaction with the propensity vector
     // 3. Perform reaction: I need to know where the different species are. That means another loop or save them in the previous one
-    var state: u32 = Hash_Wang(unif.itime + global_id.x * global_id.y + global_id.z);
+    var state: u32 = PCG(unif.itime + global_id.x * global_id.y + global_id.z);
     var rand_number: f32 = UniformFloat(state);
 
     if (rand_number <= 1. - exp(- total_propensity * params.tau)) {

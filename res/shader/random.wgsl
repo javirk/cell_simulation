@@ -11,6 +11,14 @@ fn Hash_Wang(_key: u32) -> u32 {
 	return key;
 }
 
+fn PCG(state: u32) -> u32 {
+	// According to this: https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/
+	// Better performance and _much_ better distribution than the Wang hash
+	var rng_state = state * 747796405u + 2891336453u;
+	var word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+	return (word >> 22u) ^ word;
+}
+
 
 //-------------------------------------------------------------------------
 // RNG
