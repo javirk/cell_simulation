@@ -16,7 +16,7 @@ use crate::{
     cme::CME,
     reactions_params::ReactionParams,
     statistics::{StatisticsGroup, SolverStatisticSample},
-    debug_println
+    region::RegionType
 };
 
 
@@ -208,7 +208,6 @@ impl Simulation {
         // CME
         let cme = CME::new(&bind_group_layouts, &self.statistics_groups.as_ref().expect(""), &device);
         self.cme = Some(cme);
-        debug_println!("Finished preparing for gpu");
     }
 
 
@@ -278,15 +277,26 @@ impl Simulation {
 
 // Region and particle methods
 impl Simulation {
+    
+    pub fn add_region(&mut self, name: &str, reg: RegionType, default_diffusion_rate: f32) {
+        match reg {
+            RegionType::Rectangle { p0, pf} => self.add_region_rectangle(name, p0, pf, default_diffusion_rate),
+            RegionType::Circle { center, radius } => println!("Circle"),
+        }
+    }
+
+
     // I'm not sure if this should be in here or in the lattice part. Diffusion matrix should be outside, though.
-    pub fn add_region(&mut self, name: &str, starting_pos: Vec<f32>, ending_pos: Vec<f32>, default_diffusion_rate: f32) {
+    pub fn add_region_rectangle(&mut self, name: &str, starting_pos: [f32; 3], ending_pos: [f32; 3], default_diffusion_rate: f32) {
         // Add a new region. It will be a rectangle for now. Defined by the starting and ending positions.
+
         assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
         let default_transition_rate: f32 = 8.15E-14 / 6.;
-        let new_region_idx = self.regions.names.len() as Region;
+        
         self.regions.names.push(String::from(name));
-        self.regions.positions.push(vec![starting_pos.clone(), ending_pos.clone()]);
+        self.regions.positions.push(vec![starting_pos.to_vec().clone(), ending_pos.to_vec().clone()]);
 
+        let new_region_idx = self.regions.names.len() as Region;
         let res = (self.lattice_params.raw.res[0] as usize, self.lattice_params.raw.res[1] as usize, self.lattice_params.raw.res[2] as usize);
         let start = (
             (starting_pos[0] * res.0 as f32) as usize,
@@ -718,6 +728,7 @@ impl Simulation {
     }
 
     fn texture_pass(&self, frame_num: u32, command_encoder: &mut wgpu::CommandEncoder) {
+        const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);
         let xdim = self.lattice_params.raw.res[0] as u32 + WORKGROUP_SIZE.0 - 1;
         let xgroups = xdim / WORKGROUP_SIZE.0;
         let ydim = self.lattice_params.raw.res[1] as u32 + WORKGROUP_SIZE.1 - 1;
