@@ -10,13 +10,15 @@ use crate::MAX_PARTICLES_SITE;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Params {
-    // x, y, z are measurements. Making this a vector would be more elegant. TODO
-    pub dims: [f32; 3],
-    pub res: [u32; 3],
+    // The ordering here is very important. Vectors at the end of the struct because of padding issues
     max_particles_site: u32,
     pub n_regions: u32,
-    lambda: f32, // I hope this only depends on the lattice constants.
+    lambda: f32,
     pub tau: f32,
+    pub dims: [f32; 3],
+    _padding: u32,
+    pub res: [u32; 3],
+    _padding2: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -32,12 +34,16 @@ impl LatticeParams {
     ) -> Self {
         let lattice_params = Params {
             dims: dimensions,
+            _padding: 0,
             res: resolution,
+            _padding2: 0,
             max_particles_site: MAX_PARTICLES_SITE as u32,
             n_regions: 1,
             lambda: lambda,
             tau: tau
         };
+
+        println!("Lattice parameters: {}", MAX_PARTICLES_SITE as u32);
 
         LatticeParams {
             raw: lattice_params,
@@ -65,7 +71,8 @@ impl LatticeParams {
         wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false,
-            min_binding_size: wgpu::BufferSize::new(mem::size_of::<Params>() as _),
+            //min_binding_size: wgpu::BufferSize::new(mem::size_of::<Params>() as _),
+            min_binding_size: None,
         }
     }
 }

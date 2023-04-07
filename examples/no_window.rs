@@ -72,7 +72,8 @@ fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContaner> 
 fn setup_system(device: &wgpu::Device) -> CellSimulation {
     let uniform = Uniform {
         itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
-        frame_num: 0
+        frame_num: 0,
+        slice: 0,
     };
     let uniform_buffer = UniformBuffer::new(uniform, device);
 
@@ -83,7 +84,7 @@ fn setup_system(device: &wgpu::Device) -> CellSimulation {
     
     //let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
-    let texture = Texture::new(&lattice_resolution, false, &device);
+    let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R8Unorm, false, &device);
     
     let mut simulation = Simulation::new(simulation_params);
 

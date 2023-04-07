@@ -1,10 +1,12 @@
 pub use lattice_params::LatticeParams;
 pub use simulation::Simulation;
-pub use render::Render;
 pub use setup::Setup;
 pub use uniforms::{Uniform, UniformBuffer};
 pub use render_params::RenderParams;
 pub use texture::Texture;
+pub use renderer_3d::Render3D;
+pub use renderer_2d::Render2D;
+pub use region::{Rectangle, RegionType};
 
 const MAX_PARTICLES_SITE: usize = 8;
 const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);
@@ -15,7 +17,6 @@ mod lattice;
 mod lattice_params;
 mod types;
 mod rdme;
-mod render;
 mod texture;
 mod render_params;
 mod preprocessor;
@@ -25,3 +26,6 @@ mod reactions_params;
 mod setup;
 mod statistics;
 mod utils;
+mod renderer_3d;
+mod renderer_2d;
+mod region;

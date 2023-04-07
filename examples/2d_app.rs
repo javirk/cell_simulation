@@ -7,7 +7,7 @@ use winit::{
 };
 use std::time::Instant;
 use imgui::*;
-use simulation::{Simulation, Setup, Render, Uniform, UniformBuffer, RenderParams, LatticeParams, Texture};
+use simulation::{Simulation, Setup, Render2D, Uniform, UniformBuffer, RenderParams, LatticeParams, Texture};
 use imgui_wgpu::{Renderer, RendererConfig};
 
 
@@ -38,7 +38,7 @@ fn setup_imgui(window: &Window) -> (imgui::Context, imgui_winit_support::WinitPl
 
 struct CellSimulation {
     simulation: Simulation,
-    renderer: Render,
+    renderer: Render2D,
     uniform_buffer: UniformBuffer,
     all_stats: HashMap<String, StatisticContainer>
 }
@@ -92,7 +92,8 @@ fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer>
 fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     let uniform = Uniform {
         itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
-        frame_num: 0
+        frame_num: 0,
+        slice: 0
     };
     let uniform_buffer = UniformBuffer::new(uniform, device);
 
@@ -108,10 +109,10 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     
     let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
-    let texture = Texture::new(&lattice_resolution, false, &device);
+    let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R8Unorm, false, &device);
     
     let mut simulation = Simulation::new(simulation_params);
-    let renderer = Render::new(&uniform_buffer, &texture, &simulation.lattice_params.raw, &render_params, &state.config(), device);
+    let renderer = Render2D::new(&uniform_buffer, &texture, &simulation.lattice_params.raw, &render_params, &state.config(), device);
 
     simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14/6.);
     // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);

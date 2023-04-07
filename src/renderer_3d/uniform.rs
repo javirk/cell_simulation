@@ -1,18 +1,29 @@
 use wgpu::util::DeviceExt;
 use bytemuck::{Pod, Zeroable};
 use std::mem;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
-pub struct Uniform {
-    pub itime: u32,
-    pub frame_num: u32,
-    pub slice: u32,
-    pub slice_axis: u32,
+pub struct Uniform {  // Annoying 16 byte alignment
+    pub itime: f32,
+    _padding: [u32; 3],
+    pub texture_dims: [f32; 3],
+    _padding2: u32,
+}
+
+impl Uniform {
+    pub fn new(texture_dims: [f32; 3]) -> Self {
+        Self {
+            itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f32(),
+            _padding: [0; 3],
+            texture_dims: texture_dims,
+            _padding2: 0,
+        }
+    }
 }
 
 pub struct UniformBuffer {
-    pub data: Uniform,
     pub buffer: wgpu::Buffer,
 }
 
@@ -20,12 +31,12 @@ impl UniformBuffer {
     pub fn new(uniform: Uniform, device: &wgpu::Device,) -> Self {
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("uniform buffer"),
-            contents: bytemuck::bytes_of(&uniform),
+            contents: bytemuck::cast_slice(&[uniform]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
+        println!("{:?}", mem::size_of::<Uniform>() as u32);
 
         UniformBuffer {
-            data: uniform,
             buffer: uniform_buf,
         }
     }
@@ -38,7 +49,7 @@ impl UniformBuffer {
         wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false,
-            min_binding_size: wgpu::BufferSize::new(mem::size_of::<Uniform>() as _),
+            min_binding_size: None // wgpu::BufferSize::new(mem::size_of::<Uniform>() as _),
         }
     }
 }

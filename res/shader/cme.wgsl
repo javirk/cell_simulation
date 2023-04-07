@@ -1,11 +1,6 @@
 //!include random.wgsl
 //!include functions.wgsl
 
-struct Uniforms {
-    itime: u32,
-    frame_num: u32,
-}
-
 struct Lattice {
     lattice: array<u32>,
 };

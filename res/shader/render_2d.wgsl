@@ -18,7 +18,7 @@ struct VertexOutput {
     @location(0) tex_coord: vec3<f32>,
 };
 
-struct LatticeParams {
+struct RenderParams {
     width : u32,
     height : u32,
 };
@@ -60,7 +60,7 @@ fn particle_to_color(val: u32) -> vec3<f32> {
 }
 
 @group(0) @binding(0) var texture: texture_storage_3d<r32float, read>;
-@group(0) @binding(1) var<uniform> params: LatticeParams;
+@group(0) @binding(1) var<uniform> params: RenderParams;
 @group(0) @binding(2) var<uniform> unif: Uniforms;
 
 @fragment

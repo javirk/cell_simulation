@@ -1,11 +1,6 @@
 //!include random.wgsl
 //!include functions.wgsl
 
-struct Uniforms {
-    itime: u32,
-    frame_num: u32,
-}
-
 struct Lattice {
     lattice: array<atomic<u32>>,
 };
@@ -85,7 +80,7 @@ fn move_particle(particle: u32, i_movement: i32, id_volume: vec3<u32>, initial_i
         }
         case 1: {
             // + x
-            if (id_volume.x == (params.x_res - 1u)) { return 0.; }
+            if (id_volume.x == (params.res.x - 1u)) { return 0.; }
             volume_dest.x += 1u;
         }
         case 2: {
@@ -95,7 +90,7 @@ fn move_particle(particle: u32, i_movement: i32, id_volume: vec3<u32>, initial_i
         }
         case 3: {
             // + y
-            if (id_volume.y == (params.y_res - 1u)) { return 0.; }
+            if (id_volume.y == (params.res.y - 1u)) { return 0.; }
             volume_dest.y += 1u;
         }
         case 4: {
@@ -105,7 +100,7 @@ fn move_particle(particle: u32, i_movement: i32, id_volume: vec3<u32>, initial_i
         }
         case 5: {
             // + z
-            if (id_volume.z == (params.z_res - 1u)) { return 0.; }
+            if (id_volume.z == (params.res.z - 1u)) { return 0.; }
             volume_dest.z += 1u;
         }
         default: {
@@ -134,7 +129,7 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
     }
     
     // +x
-    if (volume_id.x < (params.x_res - 1u)) {
+    if (volume_id.x < (params.res.x - 1u)) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x + 1u, volume_id.y, volume_id.z), params)];
         (*cumulative_probability)[1] = (*cumulative_probability)[0] + probability_value(src_region, dest_region, particle);
     } else {
@@ -150,7 +145,7 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
     }
 
     // +y
-    if (volume_id.y < (params.y_res - 1u)) {
+    if (volume_id.y < (params.res.y - 1u)) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x, volume_id.y + 1u, volume_id.z), params)];
         (*cumulative_probability)[3] = (*cumulative_probability)[2] + probability_value(src_region, dest_region, particle);
     } else {
@@ -166,7 +161,7 @@ fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_pro
     }
 
     // +z
-    if (volume_id.z < (params.z_res - 1u)) {
+    if (volume_id.z < (params.res.z - 1u)) {
         let dest_region = regions[get_index_occupancy(vec3<u32>(volume_id.x, volume_id.y, volume_id.z + 1u), params)];
         (*cumulative_probability)[5] = (*cumulative_probability)[4] + probability_value(src_region, dest_region, particle);
     } else {
@@ -183,9 +178,9 @@ fn rdme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let X: u32 = global_id.x;
     let Y: u32 = global_id.y;
     let Z: u32 = global_id.z;
-    let W: u32 = params.x_res;
-    let H: u32 = params.y_res;
-    let D: u32 = params.z_res;
+    let W: u32 = params.res.x;
+    let H: u32 = params.res.y;
+    let D: u32 = params.res.z;
     let particles_site: u32 = params.max_particles_site;
 
     let idx_lattice = u32(get_index_lattice(global_id, params));

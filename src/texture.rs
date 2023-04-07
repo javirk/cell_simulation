@@ -11,6 +11,7 @@ impl Texture {
     // This is important: https://www.w3.org/TR/WGSL/#storage-texel-formats
     pub fn new(
         dims: &[u32],
+        format: wgpu::TextureFormat,
         needs_lock: bool,
         device: &wgpu::Device,
     ) -> Self {
@@ -36,13 +37,12 @@ impl Texture {
 
 
         // TODO: I don't know if this is a good format. Leave it for now.
-        let format = wgpu::TextureFormat::R32Float;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension:dimension,
+            dimension: dimension,
             format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING 
             | wgpu::TextureUsages::COPY_DST 
