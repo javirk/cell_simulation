@@ -1,14 +1,61 @@
+use tensor_wgpu::Tensor3;
+use crate::types::Region;
+
+#[derive(Debug)]
 pub enum RegionType {
-    Rectangle { p0: [f32; 3], pf: [f32; 3] },
-    Circle { center: [f32; 3], radius: u32 },
+    // Cube, Sphere and Cylinder are primitives, the rest are compositions
+    Cube { name: String, p0: [f32; 3], pf: [f32; 3] },
+    Sphere { name: String, center: [f32; 3], radius: f32 },
+    SemiSphere { name: String, center: [f32; 3], radius: f32, direction: [f32; 3] },
+    Cylinder { name: String, p0: [f32; 3], pf: [f32; 3], radius: f32 },
+    SphericalShell { shell_name: String, interior_name: String, center: [f32; 3], internal_radius: f32, external_radius: f32 },
+    CylindricalShell { shell_name: String, interior_name: String, p0: [f32; 3], pf: [f32; 3], internal_radius: f32, external_radius: f32 },
 }
 
-pub struct Rectangle {
+pub struct Cube {
+    pub name: String,
     pub p0: [f32; 3],
     pub pf: [f32; 3],
 }
 
-pub struct Circle {
+pub struct Sphere {
+    pub name: String,
     pub center: [f32; 3],
-    pub radius: u32,
+    pub radius: f32,
+}
+
+pub struct SemiSphere {
+    pub name: String,
+    pub center: [f32; 3],
+    pub radius: f32,
+    pub direction: [f32; 3],
+}
+
+pub struct Cylinder {
+    pub name: String,
+    pub p0: [f32; 3],
+    pub pf: [f32; 3],
+    pub radius: f32,
+}
+
+pub struct SphericalShell {
+    pub shell_name: String,
+    pub interior_name: String,
+    pub center: [f32; 3],
+    pub internal_radius: f32,
+    pub external_radius: f32,
+}
+
+pub struct CylindricalShell {
+    pub shell_name: String,
+    pub interior_name: String,
+    pub p0: [f32; 3],
+    pub pf: [f32; 3],
+    pub internal_radius: f32,
+    pub external_radius: f32,
+}
+
+pub struct Regions {
+    pub regions: Tensor3<Region>,
+    pub types: Vec<RegionType>,
 }

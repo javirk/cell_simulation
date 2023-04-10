@@ -4,6 +4,7 @@
 
 @group(0) @binding(0) var<uniform> params: LatticeParams;
 @group(0) @binding(2) var<uniform> unif: Uniforms;
+@group(0) @binding(3) var<storage> regions: array<u32>;
 @group(1) @binding(1) var<storage, read_write> latticeDest: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<u32>;
 @group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
@@ -29,25 +30,34 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     }
 
-    // Find the majority element in the volume and save it to the texture for visualization. It depends on the mouse position for slicing.
     if (params.res[unif.slice_axis] - global_id[unif.slice_axis]) < unif.slice {
         textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(0.0, 0.0, 0.0, 0.0));
         return;
     }
-    var maxcount: u32 = 0u;
-    var element_max_freq: u32 = 0u;
-    for (var i = 0u; i < occupancy; i += 1u) {
-        var count = 0u;
-        for (var j = 0u; j < occupancy; j += 1u) {
-            if (latticeDest[idx_lattice + i] == latticeDest[idx_lattice + j]) {
-                count += 1u;
+
+    switch unif.rendering_view {
+        case 0u, default: {
+            // MAIN RENDERING VIEW
+            // Find the majority element in the volume and save it to the texture for visualization. It depends on the mouse position for slicing.
+            var maxcount: u32 = 0u;
+            var element_max_freq: u32 = 0u;
+            for (var i = 0u; i < occupancy; i += 1u) {
+                var count = 0u;
+                for (var j = 0u; j < occupancy; j += 1u) {
+                    if (latticeDest[idx_lattice + i] == latticeDest[idx_lattice + j]) {
+                        count += 1u;
+                    }
+                }
+                if (count > maxcount) {
+                    maxcount = count;
+                    element_max_freq = latticeDest[idx_lattice + i];
+                }
             }
+            textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(element_max_freq) / 255., 0.0, 0.0, 0.0));
         }
-        if (count > maxcount) {
-            maxcount = count;
-            element_max_freq = latticeDest[idx_lattice + i];
+        case 1u: {
+            // Render regions
+            textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(regions[idx_occupancy]) / 255., 0.0, 0.0, 0.0));
         }
     }
-
-    textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(element_max_freq) / 255., 0.0, 0.0, 0.0));
 }

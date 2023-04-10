@@ -1,6 +1,6 @@
-use std::{time::{SystemTime, UNIX_EPOCH}, env, collections::{HashMap, VecDeque}};
+use std::{time::{SystemTime, UNIX_EPOCH}, collections::{HashMap, VecDeque}};
 use winit::{
-    event::{self, Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, MouseScrollDelta},
+    event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, MouseScrollDelta},
     event_loop::{ControlFlow, EventLoop, },
     window::Window,
     dpi::LogicalSize,
@@ -9,6 +9,7 @@ use std::time::Instant;
 use imgui::*;
 use simulation::{Simulation, Setup, Render2D, Uniform, UniformBuffer, RenderParams, LatticeParams, Texture};
 use imgui_wgpu::{Renderer, RendererConfig};
+use simulation::RegionType;
 
 
 fn setup_imgui(window: &Window) -> (imgui::Context, imgui_winit_support::WinitPlatform) {
@@ -64,6 +65,7 @@ impl StatisticContainer {
         self.y.push_back(y);
     }
 
+    #[allow(dead_code)]
     fn mean(&self) -> f32 {
         let mut sum = 0.;
         for y in &self.y {
@@ -93,7 +95,9 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     let uniform = Uniform {
         itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
         frame_num: 0,
-        slice: 0
+        slice: 0,
+        slice_axis: 2,
+        rendering_view: 0,
     };
     let uniform_buffer = UniformBuffer::new(uniform, device);
 
@@ -109,17 +113,15 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     
     let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
-    let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R8Unorm, false, &device);
+    let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R32Float, false, &device);
     
     let mut simulation = Simulation::new(simulation_params);
-    let renderer = Render2D::new(&uniform_buffer, &texture, &simulation.lattice_params.raw, &render_params, &state.config(), device);
 
-    simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14/6.);
-    // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
+    simulation.add_region(RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5 }, 8.15E-14/6.);
+
     simulation.add_particle("A", "one", 1000, true);
     simulation.add_particle("B", "one", 1000, false);
     simulation.add_particle("C", "one", 0, false);
-
 
     //simulation.add_reaction(vec!["p1"], vec!["p2"], 0.);
     simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
@@ -128,6 +130,8 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
 
     let stats_container = make_all_stats(vec!["A"]);
+
+    let renderer = Render2D::new(&uniform_buffer, &texture, &simulation.lattice_params.raw, &render_params, &state.config(), device);
     
     CellSimulation {
         simulation,

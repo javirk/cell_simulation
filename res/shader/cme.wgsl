@@ -36,9 +36,9 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let k: f32 = reaction_rates[i_reaction];
         let i_reaction_idx = i_reaction * 3u;
         
-        let propensity: f32 = k * f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx]]) * 
-                                  f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx + 1u]]) * 
-                                  f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx + 2u]]);
+        let propensity: f32 = k * f32(concentrations[idx_concentration + reactions_idx[i_reaction_idx]] * 
+                                      concentrations[idx_concentration + reactions_idx[i_reaction_idx + 1u]] * 
+                                      concentrations[idx_concentration + reactions_idx[i_reaction_idx + 2u]]);
         propensities[i_reaction] = propensity;
         total_propensity += propensity;
         if (i_reaction > 1u) {

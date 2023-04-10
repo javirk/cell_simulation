@@ -6,7 +6,7 @@ pub use render_params::RenderParams;
 pub use texture::Texture;
 pub use renderer_3d::Render3D;
 pub use renderer_2d::Render2D;
-pub use region::{Rectangle, RegionType};
+pub use region::{Cube, Sphere, RegionType};
 
 const MAX_PARTICLES_SITE: usize = 8;
 const WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);

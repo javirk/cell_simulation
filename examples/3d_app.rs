@@ -1,4 +1,4 @@
-use std::{time::{SystemTime, UNIX_EPOCH}, env, collections::{HashMap, VecDeque}};
+use std::{time::{SystemTime, UNIX_EPOCH}, collections::{HashMap, VecDeque}};
 use winit::{
     event::{Event, WindowEvent, KeyboardInput, VirtualKeyCode, ElementState, MouseScrollDelta},
     event_loop::{ControlFlow, EventLoop, },
@@ -8,7 +8,7 @@ use winit::{
 use std::time::Instant;
 use imgui::*;
 use simulation::{Simulation, Setup, Uniform, UniformBuffer, RenderParams, LatticeParams, Texture, Render3D};
-use simulation::{Rectangle, RegionType};
+use simulation::RegionType;
 use imgui_wgpu::{Renderer, RendererConfig};
 
 
@@ -65,6 +65,7 @@ impl StatisticContainer {
         self.y.push_back(y);
     }
 
+    #[allow(dead_code)]
     fn mean(&self) -> f32 {
         let mut sum = 0.;
         for y in &self.y {
@@ -96,6 +97,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
         frame_num: 0,
         slice: 0,
         slice_axis: 2,
+        rendering_view: 0,
     };
     let uniform_buffer = UniformBuffer::new(uniform, device);
 
@@ -115,11 +117,19 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     
     let mut simulation = Simulation::new(simulation_params);
 
-    //simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14/6.);
-    simulation.add_region("one", RegionType::Rectangle {p0: [0., 0., 0.], pf: [1., 1., 1.]}, 8.15E-14/6.);
+    simulation.add_region(RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5 }, 8.15E-14/6.);
+    // simulation.add_region(RegionType::Cube { name: "one".to_string(), p0: [0., 0., 0.], pf: [1., 1., 1.] }, 8.15E-14/6.);
+    // simulation.add_region(RegionType::SphericalShell { shell_name: "one".to_string(), interior_name: "two".to_string(), center: [0.5,0.5,0.5], internal_radius: 0.4, external_radius: 0.5 }, 8.15E-14/6.);
+
+    //simulation.add_region(RegionType::Cylinder { name: "one".to_string(), p0: [0.5, 0., 0.5], pf: [0.5, 1., 0.5], radius: 0.5 }, 8.15E-14/6.);
+    // simulation.add_region(RegionType::CylindricalShell { 
+    //     shell_name: "one".to_string(), interior_name: "two".to_string(), p0: [0.5, 0., 0.5], pf: [0.5, 1., 0.5], internal_radius: 0.4, external_radius: 0.5 
+    // }, 8.15E-14/6.);
+    //simulation.add_region(RegionType::SemiSphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5, direction: [0., 1., 0.] }, 8.15E-14/6.);
+
     simulation.add_particle("A", "one", 1000, true);
     simulation.add_particle("B", "one", 1000, false);
-    simulation.add_particle("C", "one", 0, true);
+    simulation.add_particle("C", "one", 0, false);
 
     simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
     simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
@@ -166,6 +176,11 @@ fn step_system(
 fn toggle_axis(simulation: &mut CellSimulation) {
     let axis = simulation.uniform_buffer.data.slice_axis;
     simulation.uniform_buffer.data.slice_axis = (axis + 1) % 3;
+}
+
+fn toggle_view(simulation: &mut CellSimulation) {
+    let view = simulation.uniform_buffer.data.rendering_view;
+    simulation.uniform_buffer.data.rendering_view = (view + 1) % 2;
 }
 
 
@@ -219,6 +234,11 @@ pub async fn run() {
                                 VirtualKeyCode::X => {
                                     if *state == ElementState::Released {
                                         toggle_axis(&mut simulation);
+                                    }
+                                }
+                                VirtualKeyCode::V => {
+                                    if *state == ElementState::Released {
+                                        toggle_view(&mut simulation);
                                     }
                                 }
                                 VirtualKeyCode::Escape => {
@@ -288,6 +308,12 @@ pub async fn run() {
                     _ => "X",
                 };
 
+                let viewing_mode = match simulation.uniform_buffer.data.rendering_view {
+                    0 => "Particles",
+                    1 => "Regions",
+                    _ => "Volume",
+                };
+
                 let ui = imgui.frame();
                 {   
                     let display_size = ui.io().display_size;
@@ -300,6 +326,7 @@ pub async fn run() {
                             ui.text(format!("Time: {:.3}", time));
                             ui.text(format!("Slice: {}", slice_wheel));
                             ui.text(format!("Slice axis: {}", slice_name));
+                            ui.text(format!("Viewing mode: {}", viewing_mode));
                             // TODO: Add a way to choose the species
                             for (name, stat) in simulation.all_stats.iter() {
                                 ui.text(format!("{}: {}", name, stat.last()));

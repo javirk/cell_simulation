@@ -1,4 +1,5 @@
-use std::collections::{VecDeque, HashMap};
+use std::{collections::{VecDeque, HashMap}, sync::Arc};
+use cgmath::assert_relative_eq;
 use futures::Future;
 use futures::*;
 
@@ -16,7 +17,7 @@ use crate::{
     cme::CME,
     reactions_params::ReactionParams,
     statistics::{StatisticsGroup, SolverStatisticSample},
-    region::RegionType
+    region::{RegionType, Regions}
 };
 
 
@@ -39,13 +40,7 @@ pub struct Simulation {
     texture_compute_pipeline: Option<wgpu::ComputePipeline>
 }
 
-struct Regions {
-    regions: Vec<Region>, // --> Should maybe be a Tensor (1D) to have the buffer and the size together.
-    positions: Vec<Vec<Vec<f32>>>,  // Starting corner, ending corner
-    names: Vec<String>,
-    buffer: Option<wgpu::Buffer>,
-    buf_size: Option<wgpu::BufferSize>
-}
+
 
 
 impl Simulation {
@@ -58,18 +53,17 @@ impl Simulation {
             lattices.push(Lattice::new(&lattice_params.raw))
         }
 
+        let shape_regions = (lattice_params.raw.res[0] as usize, lattice_params.raw.res[1] as usize, lattice_params.raw.res[2] as usize).f();
+
         let regions = Regions {
-            regions: vec![0 as Region; lattice_params.dimensions()],
-            positions: vec![vec![vec![0.; 3], vec![1.; 3]]; 1],
-            names: vec![String::from("default")],
-            buffer: None,
-            buf_size: None
+            regions: Tensor3::<Region>::zeros(shape_regions),
+            types: vec![RegionType::Cube { name: "background".to_string(), p0: [0.; 3], pf: [1.; 3] }],
         };
 
         let reaction_params = ReactionParams::new(0, 0);
 
         let mut diffusion_matrix = Tensor3::<f32>::zeros((1, 1, 1).f());
-        diffusion_matrix[[0, 0, 0]] = 8.15E-14;
+        diffusion_matrix[[0, 0, 0]] = 8.15E-14 / 6.;
         let stoichiometry_matrix = Tensor2::<i32>::zeros((1, 1).f());
         let reactions_idx = Tensor2::<u32>::zeros((1, 3).f());
         let reaction_rates = Tensor2::<f32>::zeros((1, 1).f());
@@ -160,17 +154,12 @@ impl Simulation {
         self.lattices[1].start_buffers(device);
         
         // Diffusion matrix
-        //let diff_buffer_size = self.diffusion_matrix.matrix.len() * std::mem::size_of::<f32>();
         self.diffusion_matrix.create_buffer(device, usage, Some("Diffusion matrix buffer"));
+        println!("Diffusion matrix {}", self.diffusion_matrix);
 
         // Regions
-        let regions_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Regions buffer"),
-            contents: bytemuck::cast_slice(&self.regions.regions),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
-        self.regions.buffer = Some(regions_buffer);
-        self.regions.buf_size = wgpu::BufferSize::new((self.regions.regions.len() * std::mem::size_of::<Region>()) as _,);
+        self.regions.regions.create_buffer(device, usage, Some("Regions Buffer"));
+
         self.lattice_params.create_buffer(device);
         self.reaction_params.create_buffer(device);
         
@@ -278,25 +267,88 @@ impl Simulation {
 // Region and particle methods
 impl Simulation {
     
-    pub fn add_region(&mut self, name: &str, reg: RegionType, default_diffusion_rate: f32) {
+    pub fn add_region(&mut self, reg: RegionType, diffusion_rate: f32) {
+        //self.regions.names.push(String::from(name));
+        let transition_rate: f32 = 0.; //8.15E-14 / 6.;
         match reg {
-            RegionType::Rectangle { p0, pf} => self.add_region_rectangle(name, p0, pf, default_diffusion_rate),
-            RegionType::Circle { center, radius } => println!("Circle"),
+            RegionType::Cube { name, p0, pf} => self.add_region_cube(name, p0, pf, diffusion_rate, transition_rate),
+            RegionType::Sphere { name, center, radius } => self.add_region_sphere(name, center, radius, diffusion_rate, transition_rate),
+
+            RegionType::Cylinder { name, p0, pf, radius} => self.add_region_cylinder(name, p0, pf, radius, diffusion_rate, transition_rate),
+
+            RegionType::SemiSphere { name, center, radius, direction } => self.add_region_semisphere(name, center, radius, direction, diffusion_rate, transition_rate),
+
+            RegionType::SphericalShell { shell_name, interior_name, center, internal_radius, external_radius } => {
+                // A spherical shell is composed of two spheres: one interior and one exterior
+                self.add_region_sphere(shell_name, center, external_radius, diffusion_rate, transition_rate);
+                self.add_region_sphere(interior_name, center, internal_radius, diffusion_rate, transition_rate);
+            },
+            RegionType::CylindricalShell { shell_name, interior_name, p0, pf, internal_radius, external_radius } => {
+                // A cylindrical shell is composed of two cylinders: one interior and one exterior
+                self.add_region_cylinder(shell_name, p0, pf, external_radius, diffusion_rate, transition_rate);
+                self.add_region_cylinder(interior_name, p0, pf, internal_radius, diffusion_rate, transition_rate);
+            }
+            _ => panic!("Region type not implemented yet")
         }
     }
 
+    fn update_matrices_region(&mut self, diffusion_rate: f32, transition_rate: f32) {
+        // Add the region to the diffusion matrix. 
+        self.diffusion_matrix.enlarge_dimension(0, transition_rate);
+        self.diffusion_matrix.enlarge_dimension(1, transition_rate);
+        let num_regions = self.regions.types.len() - 1;
+        let num_particles = self.lattices[0].particle_names.len();
+        for i_part in 0..num_particles {
+            self.diffusion_matrix[[num_regions, num_regions, i_part]] = diffusion_rate;
+        }
 
-    // I'm not sure if this should be in here or in the lattice part. Diffusion matrix should be outside, though.
-    pub fn add_region_rectangle(&mut self, name: &str, starting_pos: [f32; 3], ending_pos: [f32; 3], default_diffusion_rate: f32) {
-        // Add a new region. It will be a rectangle for now. Defined by the starting and ending positions.
+        println!("Region added. New diffusion matrix: {}", self.diffusion_matrix);
+        self.lattice_params.raw.n_regions += 1;
+    }
 
-        assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
-        let default_transition_rate: f32 = 8.15E-14 / 6.;
+    fn add_region_cylinder(&mut self, name: String, p0: [f32; 3], pf: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::Cylinder { name, p0, pf, radius });
         
-        self.regions.names.push(String::from(name));
-        self.regions.positions.push(vec![starting_pos.to_vec().clone(), ending_pos.to_vec().clone()]);
+        let new_region_idx = (self.regions.types.len() - 1) as Region;
+        let res = (self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32);
+        let iradius = radius * res.0; //TODO: Use real measurements
 
-        let new_region_idx = self.regions.names.len() as Region;
+        let ip0 = [p0[0] * res.0, p0[1] * res.1, p0[2] * res.2];
+        let ipf = [pf[0] * res.0, pf[1] * res.1, pf[2] * res.2];
+
+        let v = [ipf[0] - ip0[0], ipf[1] - ip0[1], ipf[2] - ip0[2]];
+        let v2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+
+        let (mut x, mut y, mut z) = (0., 0., 0.);
+        while x < res.0 {
+            while y < res.1 {
+                while z < res.2 {
+                    let w = [x - ip0[0], y - ip0[1], z - ip0[2]];
+                    let proj = (w[0] * v[0] + w[1] * v[1] + w[2] * v[2]) / v2;
+                    let closest = [ip0[0] + proj * v[0], ip0[1] + proj * v[1], ip0[2] + proj * v[2]];
+                    let dist = (x - closest[0]).powi(2) + (y - closest[1]).powi(2) + (z - closest[2]).powi(2);
+                    
+                    if dist.sqrt() <= iradius {
+                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
+                    }
+                    z += 1.;
+                }
+                z = 0.;
+                y += 1.;
+            }
+            y = 0.;
+            x += 1.;
+        }
+
+        self.update_matrices_region(diffusion_rate, transition_rate);
+    }
+
+
+    fn add_region_cube(&mut self, name: String, starting_pos: [f32; 3], ending_pos: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::Cube { name: name, p0: starting_pos, pf: ending_pos });
+        
+        assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
+        let new_region_idx = (self.regions.types.len() - 1) as Region;
         let res = (self.lattice_params.raw.res[0] as usize, self.lattice_params.raw.res[1] as usize, self.lattice_params.raw.res[2] as usize);
         let start = (
             (starting_pos[0] * res.0 as f32) as usize,
@@ -312,39 +364,135 @@ impl Simulation {
         for x in start.0..end.0 {
             for y in start.1..end.1 {
                 for z in start.2..end.2 {
-                    self.regions.regions[x + y * res.0 + z * res.0 * res.1] = new_region_idx;
+                    self.regions.regions[[x, y, z]] = new_region_idx;
                 }
             }
         }
+        self.update_matrices_region(diffusion_rate, transition_rate);
+    }
 
-        // Add the region to the diffusion matrix. 
-        self.diffusion_matrix.enlarge_dimension(0, default_transition_rate);
-        self.diffusion_matrix.enlarge_dimension(1, default_transition_rate);
-        let num_regions = self.regions.names.len() - 1;
-        let num_particles = self.lattices[0].particle_names.len();
-        for i_part in 0..num_particles {
-            self.diffusion_matrix[[num_regions, num_regions, i_part]] = default_diffusion_rate;
+    fn add_region_sphere_legacy(&mut self, name: String, center: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::Sphere { name, center: center, radius: radius });
+        let res = (self.lattice_params.raw.res[0] as i32, self.lattice_params.raw.res[1] as i32, self.lattice_params.raw.res[2] as i32);
+        let new_region_idx = (self.regions.types.len() - 1) as Region;
+
+        let icenter = (
+            (center[0] * res.0 as f32) as i32,
+            (center[1] * res.1 as f32) as i32,
+            (center[2] * res.2 as f32) as i32
+        );
+        //let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
+        let iradius = [
+            radius * res.0 as f32,
+            radius * res.1 as f32,
+            radius * res.2 as f32
+        ];
+        let iradius_squared = iradius.iter().map(|x| x.powf(2.)).collect::<Vec<f32>>();
+
+        for x in 0..res.0 {
+            for y in 0..res.1 {
+                for z in 0..res.2 {
+                    //let pos = self.lattices[0].get_pos(x as usize, y as usize, z as usize);
+                    // let dist = (x - icenter.0).pow(2) + (y - icenter.1).pow(2) + (z - icenter.2).pow(2);
+                    let dist = ((x - icenter.0).pow(2) as f32) / iradius_squared[0] + ((y - icenter.1).pow(2) as f32) / iradius_squared[1] + ((z - icenter.2).pow(2) as f32) / iradius_squared[2];
+                    if dist.sqrt() < 1. {
+                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
+                    }
+                }
+            }
         }
+        self.update_matrices_region(diffusion_rate, transition_rate);
+    }
 
-        println!("Region {} added. New diffusion matrix: {}", name, self.diffusion_matrix);
-        self.lattice_params.raw.n_regions += 1;
+    fn add_region_sphere(&mut self, name: String, center: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::Sphere { name, center: center, radius: radius });
+        let res = [self.lattice_params.raw.res[0] as i32, self.lattice_params.raw.res[1] as i32, self.lattice_params.raw.res[2] as i32];
+        let new_region_idx = (self.regions.types.len() - 1) as Region;
+
+        let icenter = (
+            (center[0] * res[0] as f32) as i32,
+            (center[1] * res[1] as f32) as i32,
+            (center[2] * res[2] as f32) as i32
+        );
+        //let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
+        let res_squared = res.iter().map(|x| x.pow(2) as f32).collect::<Vec<f32>>();
+
+        for x in 0..res[0] {
+            for y in 0..res[1] {
+                for z in 0..res[2] {
+                    let dist = ((x - icenter.0).pow(2) as f32) / res_squared[0] + ((y - icenter.1).pow(2) as f32) / res_squared[1] + ((z - icenter.2).pow(2) as f32) / res_squared[2];
+                    if dist.sqrt() < radius {
+                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
+                    }
+                }
+            }
+        }
+        self.update_matrices_region(diffusion_rate, transition_rate);
+    }
+
+    fn add_region_semisphere(&mut self, name: String, center: [f32; 3], radius: f32, direction: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::SemiSphere { name, center, radius, direction });
+        let res = (self.lattice_params.raw.res[0] as i32, self.lattice_params.raw.res[1] as i32, self.lattice_params.raw.res[2] as i32);
+
+        let icenter = (
+            (center[0] * res.0 as f32) as i32,
+            (center[1] * res.1 as f32) as i32,
+            (center[2] * res.2 as f32) as i32
+        );
+        let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
+        
+        let new_region_idx = (self.regions.types.len() - 1) as Region;
+        for x in 0..res.0 {
+            for y in 0..res.1 {
+                for z in 0..res.2 {
+                    if ((x - icenter.0) as f32) * direction[0] + ((y - icenter.1) as f32) * direction[1] + ((z - icenter.2) as f32) * direction[2] < 0. {
+                        continue;
+                    }
+                    let dist = (x - icenter.0).pow(2) + (y - icenter.1).pow(2) + (z - icenter.2).pow(2);
+                    if dist < iradius.pow(2) {
+                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
+                    }
+                }
+            }
+        }
+        self.update_matrices_region(diffusion_rate, transition_rate);
+    }
+
+    fn find_region_index(&mut self, name: &str) -> Option<usize> {
+        self.regions.types.iter().position(|region| {
+            match region {
+                RegionType::Cube { name: region_name, .. } => { region_name == name },
+                RegionType::Sphere { name: region_name, .. } => { region_name == name },
+                RegionType::Cylinder { name: region_name,.. } => { region_name == name },
+                RegionType::SemiSphere { name: region_name,.. } => { region_name == name },
+                _ => { false }
+            }
+        })
     }
 
     pub fn add_particle(&mut self, name: &str, to_region: &str, count: u32, logging: bool) {
         // Add particles to the simulation. It will be added to the region specified by to_region
-        let region_idx = self.regions.names.iter().position(|x| x == to_region).unwrap() as usize;
+        let region_idx = self.find_region_index(to_region).expect("Region not found");
+
         let particle_idx = self.lattices[0].particle_names.len() as Particle;
 
         self.lattices[0].particle_names.push(String::from(name));
-        let starting_region = &self.regions.positions[region_idx][0];
-        let ending_region = &self.regions.positions[region_idx][1];
 
-        self.lattices[0].init_random_particles(particle_idx, count, &starting_region, &ending_region);
-        //println!("Particle {} added. New lattice: {:?}", name, self.lattices[0].lattice);
+        // let region_type = &self.regions.types[region_idx];
+        // match region_type {
+        //     RegionType::Cube { name, p0, pf } => {        
+        //         self.lattices[0].init_random_particles_cube(particle_idx, count, &p0, &pf);
+        //     },
+        //     RegionType::Sphere { name, center, radius } => {
+        //         self.lattices[0].init_random_particles_sphere(particle_idx, count, &center, *radius);
+        //     },
+        //     _ => { self.lattices[0].init_random_particles_region(particle_idx, count, &self.regions.regions, region_idx as u32); }
+        // }
+
+        self.lattices[0].init_random_particles_region(particle_idx, count, &self.regions.regions, region_idx as u32);
 
         // Update the diffusion matrix
         self.diffusion_matrix.copy_dimension(2);
-        // println!("Particle {} added. New concentration matrix: {}", name, self.lattices[0].concentrations);
 
         // Add one column to stoichiometry matrix.
         self.stoichiometry_matrix.enlarge_dimension(1, 0);
@@ -358,7 +506,7 @@ impl Simulation {
     #[allow(dead_code)]
     pub fn set_diffusion_rate(&mut self, region: &str, diffusion_rate: f32) {
         // Write diffusion rate for all the particles in a region
-        let region_idx = self.regions.names.iter().position(|x| x == region).unwrap() as usize;
+        let region_idx = self.find_region_index(region).expect("Region not found");    
         let num_particles = self.lattices[0].particle_names.len();
         for i_part in 0..num_particles {
             self.diffusion_matrix[[region_idx, region_idx, i_part]] = diffusion_rate;
@@ -368,16 +516,16 @@ impl Simulation {
     #[allow(dead_code)]
     pub fn set_diffusion_rate_particle(&mut self, particle: &str, region: &str, diffusion_rate: f32) {
         // Write diffusion rate for a given particle. Note: Diffusion != Transition (Region x Region x Particle)
-        let region_idx = self.regions.names.iter().position(|x| x == region).unwrap() as usize;
+        let region_idx = self.find_region_index(region).expect("Region not found");    
         let particle_idx = self.lattices[0].particle_names.iter().position(|x| x == particle).unwrap() as usize;
         self.diffusion_matrix[[region_idx, region_idx, particle_idx]] = diffusion_rate;
     }
 
     #[allow(dead_code)]
     pub fn set_transition_rate(&mut self, from_region: &str, to_region: &str, transition_rate: f32) {
-        // Write transition rate for all the particles in a region
-        let from_region_idx = self.regions.names.iter().position(|x| x == from_region).unwrap() as usize;
-        let to_region_idx = self.regions.names.iter().position(|x| x == to_region).unwrap() as usize;
+        // Write transition rate for all the particles in a region  
+        let from_region_idx = self.find_region_index(from_region).expect("Region not found");    
+        let to_region_idx = self.find_region_index(to_region).expect("Region not found");    
         let num_particles = self.lattices[0].particle_names.len();
         for i_part in 0..num_particles {
             self.diffusion_matrix[[from_region_idx, to_region_idx, i_part]] = transition_rate;
@@ -387,8 +535,8 @@ impl Simulation {
     #[allow(dead_code)]
     pub fn set_transition_rate_particle(&mut self, particle: &str, from_region: &str, to_region: &str, transition_rate: f32) {
         // Write transition rate for a given particle. Note: Diffusion != Transition (Region x Region x Particle)
-        let from_region_idx = self.regions.names.iter().position(|x| x == from_region).unwrap() as usize;
-        let to_region_idx = self.regions.names.iter().position(|x| x == to_region).unwrap() as usize;
+        let from_region_idx = self.find_region_index(from_region).expect("Region not found");    
+        let to_region_idx = self.find_region_index(to_region).expect("Region not found");    
         let particle_idx = self.lattices[0].particle_names.iter().position(|x| x == particle).unwrap() as usize;
         self.diffusion_matrix[[from_region_idx, to_region_idx, particle_idx]] = transition_rate;
     }
@@ -476,7 +624,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: self.regions.buf_size
+                            min_binding_size: wgpu::BufferSize::new(self.regions.regions.buffer_size() as _),
                         },
                         count: None,
                     },
@@ -632,7 +780,7 @@ impl Simulation {
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: self.regions.buffer.as_ref().expect("").as_entire_binding(),
+                        resource: self.regions.regions.binding_resource(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,

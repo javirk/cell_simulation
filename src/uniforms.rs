@@ -9,6 +9,7 @@ pub struct Uniform {
     pub frame_num: u32,
     pub slice: u32,
     pub slice_axis: u32,
+    pub rendering_view: u32,
 }
 
 pub struct UniformBuffer {

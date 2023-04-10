@@ -112,7 +112,7 @@ fn move_particle(particle: u32, i_movement: i32, id_volume: vec3<u32>, initial_i
 }
 
 fn probability_value(src_region: u32, dest_region: u32, particle: u32) -> f32 {
-    let val: f32 = diffusion_matrix[src_region + dest_region * params.n_regions + params.n_regions * params.n_regions * particle];
+    let val: f32 = diffusion_matrix[particle + (reaction_params.num_species + 1u) * dest_region + (reaction_params.num_species + 1u) * params.n_regions * src_region];
     return val * params.tau / (params.lambda * params.lambda);
 }
 

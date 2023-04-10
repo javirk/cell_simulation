@@ -1,8 +1,9 @@
-use std::{time::{SystemTime, UNIX_EPOCH}, collections::{HashMap, VecDeque}, sync::Arc};
+use std::{time::{SystemTime, UNIX_EPOCH}, collections::{HashMap, VecDeque}};
 use std::time::Instant;
 use simulation::{Simulation, Setup, Uniform, UniformBuffer, LatticeParams, Texture};
 use std::error::Error;
 use csv::Writer;
+use simulation::RegionType;
 
 
 struct CellSimulation {
@@ -74,6 +75,8 @@ fn setup_system(device: &wgpu::Device) -> CellSimulation {
         itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
         frame_num: 0,
         slice: 0,
+        slice_axis: 2,
+        rendering_view: 0,
     };
     let uniform_buffer = UniformBuffer::new(uniform, device);
 
@@ -82,14 +85,16 @@ fn setup_system(device: &wgpu::Device) -> CellSimulation {
     let tau = 3E-3;
     let lambda = 31.25E-9;
     
-    //let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
-    let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R8Unorm, false, &device);
+    let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R32Float, false, &device);
     
     let mut simulation = Simulation::new(simulation_params);
 
-    simulation.add_region("one", vec![0.,0.,0.], vec![1.,1.,1.], 8.15E-14/6.);
-    // simulation.add_region("two", vec![0.2,0.2,0.2], vec![0.8,0.8,0.8], 6.3);
+    // simulation.add_region("one", RegionType::Cube {p0: [0., 0., 0.], pf: [0.5, 1., 1.]}, 8.15E-14/6.);
+    simulation.add_region(RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5 }, 8.15E-14/6.);
+    //simulation.add_region("two", RegionType::Cube {p0: [0.5, 0., 0.], pf: [1., 1., 1.]}, 8.15E-14/6.);
+    //simulation.add_region("one", RegionType::Sphere { center: [0.5,0.5,0.5], radius: 0.5 }, 8.15E-14/6.);
+
     simulation.add_particle("A", "one", 1000, true);
     simulation.add_particle("B", "one", 1000, false);
     simulation.add_particle("C", "one", 0, false);
@@ -138,13 +143,13 @@ pub async fn run() {
     // Setup the simulation.
     let mut simulation = setup_system(&state.device);
 
-    while time < 10. {
+    while time < 20. {
         step_system(&mut simulation, &state.device, &state.queue);
 
         {
             while let Some(sample) = simulation.simulation.stats.pop_front() {
                 //println!("{}: {} {}", sample.name, time, sample.value);
-                println!("FPS: {}\n", fps);
+                println!("FPS: {}", fps);
                 simulation.all_stats.entry(sample.name).and_modify(|k| k.add(sample.iteration_count, sample.value as f32));
             }
             accum_time += last_frame_inst.elapsed().as_secs_f32();

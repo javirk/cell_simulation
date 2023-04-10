@@ -32,6 +32,7 @@ struct Uniforms {
     frame_num: u32,
     slice: u32,
     slice_axis: u32,
+    rendering_view: u32,
 }
 
 struct Locks {
