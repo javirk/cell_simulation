@@ -106,7 +106,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
         1280, // width
     ];
 
-    let lattice_resolution = [32, 32, 32];
+    let lattice_resolution = [64, 64, 64];
     let dimensions = [1., 1., 1.];
     let tau = 3E-3;
     let lambda = 31.25E-9;
@@ -117,22 +117,23 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     
     let mut simulation = Simulation::new(simulation_params);
 
-    simulation.add_region(RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5 }, 8.15E-14/6.);
+    // simulation.add_region(RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5 }, 8.15E-14/6.);
     // simulation.add_region(RegionType::Cube { name: "one".to_string(), p0: [0., 0., 0.], pf: [1., 1., 1.] }, 8.15E-14/6.);
     // simulation.add_region(RegionType::SphericalShell { shell_name: "one".to_string(), interior_name: "two".to_string(), center: [0.5,0.5,0.5], internal_radius: 0.4, external_radius: 0.5 }, 8.15E-14/6.);
 
-    //simulation.add_region(RegionType::Cylinder { name: "one".to_string(), p0: [0.5, 0., 0.5], pf: [0.5, 1., 0.5], radius: 0.5 }, 8.15E-14/6.);
+    // simulation.add_region(RegionType::Cylinder { name: "one".to_string(), p0: [0.5, 0., 0.5], pf: [0.5, 1., 0.5], radius: 0.5 }, 8.15E-14/6.);
     // simulation.add_region(RegionType::CylindricalShell { 
     //     shell_name: "one".to_string(), interior_name: "two".to_string(), p0: [0.5, 0., 0.5], pf: [0.5, 1., 0.5], internal_radius: 0.4, external_radius: 0.5 
     // }, 8.15E-14/6.);
-    //simulation.add_region(RegionType::SemiSphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5, direction: [0., 1., 0.] }, 8.15E-14/6.);
+    // simulation.add_region(RegionType::SemiSphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5, direction: [0., 0., 1.] }, 8.15E-14/6.);
+    simulation.add_region(RegionType::Capsid { shell_name: "one".to_string(), interior_name: "two".to_string(), center: [0.5, 0.5, 0.5], dir: [0., 0., 1.], internal_radius: 0.05, external_radius: 0.1, total_length: 1. }, 8.15E-14/6.);
 
-    simulation.add_particle("A", "one", 1000, true);
-    simulation.add_particle("B", "one", 1000, false);
-    simulation.add_particle("C", "one", 0, false);
+    // simulation.add_particle("A", "one", 1000, true);
+    // simulation.add_particle("B", "one", 1000, false);
+    // simulation.add_particle("C", "one", 0, false);
 
-    simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
-    simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
+    // simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
+    // simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
 
     simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
 

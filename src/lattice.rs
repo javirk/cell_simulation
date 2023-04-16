@@ -53,7 +53,8 @@ impl Lattice {
         self.concentrations.enlarge_dimension(3, 0);
         let mut rng = rand::thread_rng();
         for _ in 0..num_particles {
-            loop {
+            let mut i = 0;
+            while i < 100 {
                 let site = [
                     rng.gen_range(0..self.lattice_params.res[0] as usize),
                     rng.gen_range(0..self.lattice_params.res[1] as usize),
@@ -65,6 +66,10 @@ impl Lattice {
                         Err(_) => continue,
                     }
                 }
+                i += 1;
+            }
+            if i == 100 {
+                panic!("Could not add particle to region");
             }
         }
     }

@@ -51,6 +51,7 @@ fn vs_main(
 
 fn get_normal(center: vec3<f32>, hit_point: vec3<f32>) -> vec3<f32> {
     var distance_vec: vec3<f32> = hit_point - center;
+    distance_vec = distance_vec * vec3<f32>(unif.res);
     var vector_positive = abs(distance_vec);
     if (vector_positive.x > vector_positive.y) && (vector_positive.x > vector_positive.z) {
         return vec3<f32>(sign(distance_vec.x), 0., 0.);
@@ -241,7 +242,7 @@ fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>,
 
     var distance: f32 = 0.;
 
-    for(var i: i32 = 0; i < 64; i++) {
+    for(var i: i32 = 0; i < 128; i++) {
         var sample: f32 = textureLoad(texture, i_voxel).r;
         if (sample > 0.) {
             var new_pos = pos + dir * distance;

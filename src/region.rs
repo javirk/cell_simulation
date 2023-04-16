@@ -10,6 +10,7 @@ pub enum RegionType {
     Cylinder { name: String, p0: [f32; 3], pf: [f32; 3], radius: f32 },
     SphericalShell { shell_name: String, interior_name: String, center: [f32; 3], internal_radius: f32, external_radius: f32 },
     CylindricalShell { shell_name: String, interior_name: String, p0: [f32; 3], pf: [f32; 3], internal_radius: f32, external_radius: f32 },
+    Capsid { shell_name: String, interior_name: String, center: [f32; 3], dir: [f32; 3], internal_radius: f32, external_radius: f32, total_length: f32 },
 }
 
 pub struct Cube {
@@ -58,4 +59,14 @@ pub struct CylindricalShell {
 pub struct Regions {
     pub regions: Tensor3<Region>,
     pub types: Vec<RegionType>,
+}
+
+pub struct Capsid {
+    pub shell_name: String,
+    pub interior_name: String,
+    pub center: [f32; 3],
+    pub dir: [f32; 3],
+    pub internal_radius: f32,
+    pub external_radius: f32,
+    pub total_length: f32,
 }

@@ -1,5 +1,5 @@
 use std::{collections::{VecDeque, HashMap}, sync::Arc};
-use cgmath::assert_relative_eq;
+use cgmath::{assert_relative_eq, num_traits::Pow};
 use futures::Future;
 use futures::*;
 
@@ -271,22 +271,53 @@ impl Simulation {
         //self.regions.names.push(String::from(name));
         let transition_rate: f32 = 0.; //8.15E-14 / 6.;
         match reg {
-            RegionType::Cube { name, p0, pf} => self.add_region_cube(name, p0, pf, diffusion_rate, transition_rate),
-            RegionType::Sphere { name, center, radius } => self.add_region_sphere(name, center, radius, diffusion_rate, transition_rate),
+            RegionType::Cube { name, p0, pf} => self.add_region_cube(&name, p0, pf, diffusion_rate, transition_rate),
+            RegionType::Sphere { name, center, radius } => self.add_region_sphere(&name, center, radius, diffusion_rate, transition_rate),
 
-            RegionType::Cylinder { name, p0, pf, radius} => self.add_region_cylinder(name, p0, pf, radius, diffusion_rate, transition_rate),
+            RegionType::Cylinder { name, p0, pf, radius} => self.add_region_cylinder(&name, p0, pf, radius, diffusion_rate, transition_rate),
 
-            RegionType::SemiSphere { name, center, radius, direction } => self.add_region_semisphere(name, center, radius, direction, diffusion_rate, transition_rate),
+            RegionType::SemiSphere { name, center, radius, direction } => self.add_region_semisphere(&name, center, radius, direction, diffusion_rate, transition_rate),
 
             RegionType::SphericalShell { shell_name, interior_name, center, internal_radius, external_radius } => {
                 // A spherical shell is composed of two spheres: one interior and one exterior
-                self.add_region_sphere(shell_name, center, external_radius, diffusion_rate, transition_rate);
-                self.add_region_sphere(interior_name, center, internal_radius, diffusion_rate, transition_rate);
+                self.add_region_sphere(&shell_name, center, external_radius, diffusion_rate, transition_rate);
+                self.add_region_sphere(&interior_name, center, internal_radius, diffusion_rate, transition_rate);
             },
             RegionType::CylindricalShell { shell_name, interior_name, p0, pf, internal_radius, external_radius } => {
                 // A cylindrical shell is composed of two cylinders: one interior and one exterior
-                self.add_region_cylinder(shell_name, p0, pf, external_radius, diffusion_rate, transition_rate);
-                self.add_region_cylinder(interior_name, p0, pf, internal_radius, diffusion_rate, transition_rate);
+                self.add_region_cylinder(&shell_name, p0, pf, external_radius, diffusion_rate, transition_rate);
+                self.add_region_cylinder(&interior_name, p0, pf, internal_radius, diffusion_rate, transition_rate);
+            },
+            RegionType::Capsid { shell_name, interior_name, center, dir, internal_radius, external_radius, total_length } => {
+                // A cylinder and two semispheres
+                assert!(total_length <= 1.);
+                let cylinder_length = total_length - 2. * external_radius;
+                let p0 = [
+                    center[0] - dir[0] * cylinder_length / 2.,
+                    center[1] - dir[1] * cylinder_length / 2.,
+                    center[2] - dir[2] * cylinder_length / 2.
+                ];
+                let pf = [
+                    center[0] + dir[0] * cylinder_length / 2.,
+                    center[1] + dir[1] * cylinder_length / 2.,
+                    center[2] + dir[2] * cylinder_length / 2.
+                ];
+                let neg_dir = [-dir[0], -dir[1], -dir[2]];
+                let pos1 = [
+                    p0[0] + dir[0] * external_radius,
+                    p0[1] + dir[1] * external_radius,
+                    p0[2] + dir[2] * external_radius
+                ];
+                let pos2 = [
+                    pf[0] - dir[0] * external_radius,
+                    pf[1] - dir[1] * external_radius,
+                    pf[2] - dir[2] * external_radius
+                ];
+                self.add_region_cylinder(&shell_name, p0, pf, external_radius, diffusion_rate, transition_rate);
+                self.add_region_cylinder(&interior_name, p0, pf, internal_radius, diffusion_rate, transition_rate);
+                self.add_region_semisphere("a shell", pos1, external_radius, neg_dir, diffusion_rate, transition_rate);
+                self.add_region_semisphere("another", pos2, external_radius, dir, diffusion_rate, transition_rate);
+
             }
             _ => panic!("Region type not implemented yet")
         }
@@ -306,29 +337,33 @@ impl Simulation {
         self.lattice_params.raw.n_regions += 1;
     }
 
-    fn add_region_cylinder(&mut self, name: String, p0: [f32; 3], pf: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
-        self.regions.types.push(RegionType::Cylinder { name, p0, pf, radius });
+    fn add_region_cylinder(&mut self, name: &str, p0: [f32; 3], pf: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::Cylinder { name: name.to_string(), p0, pf, radius });
         
         let new_region_idx = (self.regions.types.len() - 1) as Region;
-        let res = (self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32);
-        let iradius = radius * res.0; //TODO: Use real measurements
+        let res = [self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32];
 
-        let ip0 = [p0[0] * res.0, p0[1] * res.1, p0[2] * res.2];
-        let ipf = [pf[0] * res.0, pf[1] * res.1, pf[2] * res.2];
+        let ip0 = [p0[0] * res[0], p0[1] * res[1], p0[2] * res[2]];
+        let ipf = [pf[0] * res[0], pf[1] * res[1], pf[2] * res[2]];
 
         let v = [ipf[0] - ip0[0], ipf[1] - ip0[1], ipf[2] - ip0[2]];
         let v2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
 
+        let radius_squared = radius.powf(2.);
+        let voxel_size_squared = res.iter().map(|x|  (1. / *x as f32).pow(2)).collect::<Vec<f32>>();
+
         let (mut x, mut y, mut z) = (0., 0., 0.);
-        while x < res.0 {
-            while y < res.1 {
-                while z < res.2 {
+        while x < res[0] {
+            while y < res[1] {
+                while z < res[2] {
                     let w = [x - ip0[0], y - ip0[1], z - ip0[2]];
                     let proj = (w[0] * v[0] + w[1] * v[1] + w[2] * v[2]) / v2;
                     let closest = [ip0[0] + proj * v[0], ip0[1] + proj * v[1], ip0[2] + proj * v[2]];
-                    let dist = (x - closest[0]).powi(2) + (y - closest[1]).powi(2) + (z - closest[2]).powi(2);
+                    let dist: f32 = (x - closest[0]).powi(2) * voxel_size_squared[0] +
+                                    (y - closest[1]).powi(2) * voxel_size_squared[1] +
+                                    (z - closest[2]).powi(2) * voxel_size_squared[2];
                     
-                    if dist.sqrt() <= iradius {
+                    if dist <= radius_squared {
                         self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
                     }
                     z += 1.;
@@ -344,8 +379,8 @@ impl Simulation {
     }
 
 
-    fn add_region_cube(&mut self, name: String, starting_pos: [f32; 3], ending_pos: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
-        self.regions.types.push(RegionType::Cube { name: name, p0: starting_pos, pf: ending_pos });
+    fn add_region_cube(&mut self, name: &str, starting_pos: [f32; 3], ending_pos: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::Cube { name: name.to_string(), p0: starting_pos, pf: ending_pos });
         
         assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
         let new_region_idx = (self.regions.types.len() - 1) as Region;
@@ -371,89 +406,76 @@ impl Simulation {
         self.update_matrices_region(diffusion_rate, transition_rate);
     }
 
-    fn add_region_sphere_legacy(&mut self, name: String, center: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
-        self.regions.types.push(RegionType::Sphere { name, center: center, radius: radius });
-        let res = (self.lattice_params.raw.res[0] as i32, self.lattice_params.raw.res[1] as i32, self.lattice_params.raw.res[2] as i32);
+    fn add_region_sphere(&mut self, name: &str, center: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::Sphere { name: name.to_string(), center: center, radius: radius });
+        let res = [self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32];
         let new_region_idx = (self.regions.types.len() - 1) as Region;
 
-        let icenter = (
-            (center[0] * res.0 as f32) as i32,
-            (center[1] * res.1 as f32) as i32,
-            (center[2] * res.2 as f32) as i32
+        let center = (
+            center[0] * res[0] as f32,
+            center[1] * res[1] as f32,
+            center[2] * res[2] as f32
         );
+        let radius_squared = radius.powf(2.);
         //let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
-        let iradius = [
-            radius * res.0 as f32,
-            radius * res.1 as f32,
-            radius * res.2 as f32
-        ];
-        let iradius_squared = iradius.iter().map(|x| x.powf(2.)).collect::<Vec<f32>>();
+        let voxel_size_squared = res.iter().map(|x|  (1. / *x as f32).pow(2)).collect::<Vec<f32>>();
 
-        for x in 0..res.0 {
-            for y in 0..res.1 {
-                for z in 0..res.2 {
-                    //let pos = self.lattices[0].get_pos(x as usize, y as usize, z as usize);
-                    // let dist = (x - icenter.0).pow(2) + (y - icenter.1).pow(2) + (z - icenter.2).pow(2);
-                    let dist = ((x - icenter.0).pow(2) as f32) / iradius_squared[0] + ((y - icenter.1).pow(2) as f32) / iradius_squared[1] + ((z - icenter.2).pow(2) as f32) / iradius_squared[2];
-                    if dist.sqrt() < 1. {
+        let (mut x, mut y, mut z) = (0., 0., 0.);
+        while x < res[0] {
+            while y < res[1] {
+                while z < res[2] {
+                    let dist: f32 = (x - center.0).pow(2) * voxel_size_squared[0] + 
+                                    (y - center.1).pow(2) * voxel_size_squared[1] +
+                                    (z - center.2).pow(2) * voxel_size_squared[2];
+                    if dist < radius_squared {
                         self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
                     }
+                    z += 1.;
                 }
+                z = 0.;
+                y += 1.;
             }
+            y = 0.;
+            x += 1.;
         }
+
         self.update_matrices_region(diffusion_rate, transition_rate);
     }
 
-    fn add_region_sphere(&mut self, name: String, center: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
-        self.regions.types.push(RegionType::Sphere { name, center: center, radius: radius });
-        let res = [self.lattice_params.raw.res[0] as i32, self.lattice_params.raw.res[1] as i32, self.lattice_params.raw.res[2] as i32];
-        let new_region_idx = (self.regions.types.len() - 1) as Region;
+    fn add_region_semisphere(&mut self, name: &str, center: [f32; 3], radius: f32, direction: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
+        self.regions.types.push(RegionType::SemiSphere { name: name.to_string(), center, radius, direction });
+        let res = [self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32];
 
-        let icenter = (
-            (center[0] * res[0] as f32) as i32,
-            (center[1] * res[1] as f32) as i32,
-            (center[2] * res[2] as f32) as i32
+        let center = (
+            center[0] * res[0] as f32,
+            center[1] * res[1] as f32,
+            center[2] * res[2] as f32
         );
-        //let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
-        let res_squared = res.iter().map(|x| x.pow(2) as f32).collect::<Vec<f32>>();
-
-        for x in 0..res[0] {
-            for y in 0..res[1] {
-                for z in 0..res[2] {
-                    let dist = ((x - icenter.0).pow(2) as f32) / res_squared[0] + ((y - icenter.1).pow(2) as f32) / res_squared[1] + ((z - icenter.2).pow(2) as f32) / res_squared[2];
-                    if dist.sqrt() < radius {
-                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
-                    }
-                }
-            }
-        }
-        self.update_matrices_region(diffusion_rate, transition_rate);
-    }
-
-    fn add_region_semisphere(&mut self, name: String, center: [f32; 3], radius: f32, direction: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
-        self.regions.types.push(RegionType::SemiSphere { name, center, radius, direction });
-        let res = (self.lattice_params.raw.res[0] as i32, self.lattice_params.raw.res[1] as i32, self.lattice_params.raw.res[2] as i32);
-
-        let icenter = (
-            (center[0] * res.0 as f32) as i32,
-            (center[1] * res.1 as f32) as i32,
-            (center[2] * res.2 as f32) as i32
-        );
-        let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
+        let radius_squared = radius.powf(2.);
+        let voxel_size_squared = res.iter().map(|x|  (1. / *x as f32).pow(2)).collect::<Vec<f32>>();
         
         let new_region_idx = (self.regions.types.len() - 1) as Region;
-        for x in 0..res.0 {
-            for y in 0..res.1 {
-                for z in 0..res.2 {
-                    if ((x - icenter.0) as f32) * direction[0] + ((y - icenter.1) as f32) * direction[1] + ((z - icenter.2) as f32) * direction[2] < 0. {
+        let (mut x, mut y, mut z) = (0., 0., 0.);
+        while x < res[0] {
+            while y < res[1] {
+                while z < res[2] {
+                    if ((x - center.0) as f32) * direction[0] + ((y - center.1) as f32) * direction[1] + ((z - center.2) as f32) * direction[2] < 0. {
+                        z += 1.;
                         continue;
                     }
-                    let dist = (x - icenter.0).pow(2) + (y - icenter.1).pow(2) + (z - icenter.2).pow(2);
-                    if dist < iradius.pow(2) {
+                    let dist: f32 = (x - center.0).pow(2) * voxel_size_squared[0] + 
+                                    (y - center.1).pow(2) * voxel_size_squared[1] +
+                                    (z - center.2).pow(2) * voxel_size_squared[2];
+                    if dist < radius_squared {
                         self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
                     }
+                    z += 1.;
                 }
+                z = 0.;
+                y += 1.;
             }
+            y = 0.;
+            x += 1.;
         }
         self.update_matrices_region(diffusion_rate, transition_rate);
     }

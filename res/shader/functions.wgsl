@@ -40,10 +40,13 @@ struct Locks {
 };
 
 fn get_index_lattice(id_volume: vec3<u32>, params: LatticeParams) -> i32 {
-    return i32((id_volume.x + id_volume.y * params.res.x + id_volume.z * params.res.x * params.res.y) * params.max_particles_site);
+    // This would add the particle number first, but we want the first position: 0
+    return i32((id_volume.z + id_volume.y * params.res.z + id_volume.x * params.res.z * params.res.y) * params.max_particles_site);
+    //return i32((id_volume.x + id_volume.y * params.res.x + id_volume.z * params.res.x * params.res.y) * params.max_particles_site);
 }
 
 fn get_index_occupancy(id_volume: vec3<u32>, params: LatticeParams) -> i32 {
-    return i32(id_volume.x + id_volume.y * params.res.x + id_volume.z * params.res.x * params.res.y);
+    return i32(id_volume.z + id_volume.y * params.res.z + id_volume.x * params.res.z * params.res.y);
+    //return i32(id_volume.x + id_volume.y * params.res.x + id_volume.z * params.res.x * params.res.y);
 }
 
