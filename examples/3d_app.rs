@@ -121,7 +121,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     // simulation.add_region(RegionType::Cube { name: "one".to_string(), p0: [0., 0., 0.], pf: [1., 1., 1.] }, 8.15E-14/6.);
     // simulation.add_region(RegionType::SphericalShell { shell_name: "one".to_string(), interior_name: "two".to_string(), center: [0.5,0.5,0.5], internal_radius: 0.4, external_radius: 0.5 }, 8.15E-14/6.);
 
-    // simulation.add_region(RegionType::Cylinder { name: "one".to_string(), p0: [0.5, 0., 0.5], pf: [0.5, 1., 0.5], radius: 0.5 }, 8.15E-14/6.);
+    // simulation.add_region(RegionType::Cylinder { name: "one".to_string(), p0: [0.5, 0.5, 0.1], pf: [0.5, 0.5, 0.9], radius: 0.5 }, 8.15E-14/6.);
     // simulation.add_region(RegionType::CylindricalShell { 
     //     shell_name: "one".to_string(), interior_name: "two".to_string(), p0: [0.5, 0., 0.5], pf: [0.5, 1., 0.5], internal_radius: 0.4, external_radius: 0.5 
     // }, 8.15E-14/6.);

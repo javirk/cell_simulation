@@ -302,22 +302,20 @@ impl Simulation {
                     center[1] + dir[1] * cylinder_length / 2.,
                     center[2] + dir[2] * cylinder_length / 2.
                 ];
+                println!("p0: {:?}, pf: {:?}", p0, pf);
                 let neg_dir = [-dir[0], -dir[1], -dir[2]];
-                let pos1 = [
-                    p0[0] + dir[0] * external_radius,
-                    p0[1] + dir[1] * external_radius,
-                    p0[2] + dir[2] * external_radius
-                ];
-                let pos2 = [
-                    pf[0] - dir[0] * external_radius,
-                    pf[1] - dir[1] * external_radius,
-                    pf[2] - dir[2] * external_radius
-                ];
                 self.add_region_cylinder(&shell_name, p0, pf, external_radius, diffusion_rate, transition_rate);
                 self.add_region_cylinder(&interior_name, p0, pf, internal_radius, diffusion_rate, transition_rate);
-                self.add_region_semisphere("a shell", pos1, external_radius, neg_dir, diffusion_rate, transition_rate);
-                self.add_region_semisphere("another", pos2, external_radius, dir, diffusion_rate, transition_rate);
-
+                self.add_region_semisphere("cap1", p0, external_radius, neg_dir, diffusion_rate, transition_rate);
+                self.add_region_semisphere("cap2", pf, external_radius, dir, diffusion_rate, transition_rate);
+                self.add_region_semisphere("inside1", p0, internal_radius, neg_dir, diffusion_rate, transition_rate);
+                self.add_region_semisphere("inside2", pf, internal_radius, dir, diffusion_rate, transition_rate);
+                // TODO: Join cap1 and cap2 to shell name
+                // TODO: Join inside1 and inside2 to interior name
+                self.join_regions("cap1", &shell_name);
+                self.join_regions("cap2", &shell_name);
+                self.join_regions("inside1", &interior_name);
+                self.join_regions("inside2", &interior_name);
             }
             _ => panic!("Region type not implemented yet")
         }
@@ -334,7 +332,7 @@ impl Simulation {
         }
 
         println!("Region added. New diffusion matrix: {}", self.diffusion_matrix);
-        self.lattice_params.raw.n_regions += 1;
+        self.lattice_params.add_region(); // TODO: This must be a method of lattice params
     }
 
     fn add_region_cylinder(&mut self, name: &str, p0: [f32; 3], pf: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
@@ -345,25 +343,40 @@ impl Simulation {
 
         let ip0 = [p0[0] * res[0], p0[1] * res[1], p0[2] * res[2]];
         let ipf = [pf[0] * res[0], pf[1] * res[1], pf[2] * res[2]];
+        println!("ip0: {:?}, ipf: {:?}", ip0, ipf);
 
         let v = [ipf[0] - ip0[0], ipf[1] - ip0[1], ipf[2] - ip0[2]];
         let v2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+        let r_const: f32 = radius * radius * v2;
 
-        let radius_squared = radius.powf(2.);
         let voxel_size_squared = res.iter().map(|x|  (1. / *x as f32).pow(2)).collect::<Vec<f32>>();
 
         let (mut x, mut y, mut z) = (0., 0., 0.);
         while x < res[0] {
             while y < res[1] {
                 while z < res[2] {
+                    // Lies betwen the planes:
+                    let w = [x - ipf[0], y - ipf[1], z - ipf[2]];
+                    let proj = w[0] * v[0] + w[1] * v[1] + w[2] * v[2];
+                    if proj > 0. {
+                        z += 1.;
+                        continue;
+                    }
+
                     let w = [x - ip0[0], y - ip0[1], z - ip0[2]];
-                    let proj = (w[0] * v[0] + w[1] * v[1] + w[2] * v[2]) / v2;
-                    let closest = [ip0[0] + proj * v[0], ip0[1] + proj * v[1], ip0[2] + proj * v[2]];
-                    let dist: f32 = (x - closest[0]).powi(2) * voxel_size_squared[0] +
-                                    (y - closest[1]).powi(2) * voxel_size_squared[1] +
-                                    (z - closest[2]).powi(2) * voxel_size_squared[2];
-                    
-                    if dist <= radius_squared {
+                    let proj = w[0] * v[0] + w[1] * v[1] + w[2] * v[2];
+                    if proj < 0. {
+                        z += 1.;
+                        continue;
+                    }
+
+                    // Lies inside the cylinder:
+                    let cp = [w[1] * v[2] - w[2] * v[1], w[2] * v[0] - w[0] * v[2], w[0] * v[1] - w[1] * v[0]];
+                    let cp_norm = cp[0] * cp[0] * voxel_size_squared[0] + 
+                                       cp[1] * cp[1] * voxel_size_squared[1] + 
+                                       cp[2] * cp[2] * voxel_size_squared[2];
+
+                    if cp_norm <= r_const {
                         self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
                     }
                     z += 1.;
@@ -377,7 +390,6 @@ impl Simulation {
 
         self.update_matrices_region(diffusion_rate, transition_rate);
     }
-
 
     fn add_region_cube(&mut self, name: &str, starting_pos: [f32; 3], ending_pos: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
         self.regions.types.push(RegionType::Cube { name: name.to_string(), p0: starting_pos, pf: ending_pos });
@@ -492,6 +504,38 @@ impl Simulation {
         })
     }
 
+    fn join_regions(&mut self, region_delete: &str, to_region: &str) {
+        let region_delete_idx = self.find_region_index(region_delete).expect("Region not found");
+        let to_region_idx = self.find_region_index(to_region).expect("Region not found");
+
+        let res = [
+            self.lattice_params.raw.res[0] as usize, 
+            self.lattice_params.raw.res[1] as usize,
+            self.lattice_params.raw.res[2] as usize
+        ];
+
+        for x in 0..res[0] {
+            for y in 0..res[1] {
+                for z in 0..res[2] {
+                    if self.regions.cell([x, y, z]) == region_delete_idx as Region {
+                        self.regions.set_value_position(to_region_idx, [x, y, z]);
+                    }
+                    if self.regions.cell([x, y, z]) > region_delete_idx as Region {
+                        self.regions.substract_value_position(1, [x, y, z]);
+                    }
+                }
+            }
+        }
+
+        // Update the regions matrix: region_keep can be removed
+        self.diffusion_matrix.remove_element_at(0, region_delete_idx);
+        self.diffusion_matrix.remove_element_at(1, region_delete_idx);
+        self.lattice_params.remove_region();
+
+        self.regions.types.remove(region_delete_idx);
+
+    }
+
     pub fn add_particle(&mut self, name: &str, to_region: &str, count: u32, logging: bool) {
         // Add particles to the simulation. It will be added to the region specified by to_region
         let region_idx = self.find_region_index(to_region).expect("Region not found");
@@ -523,7 +567,6 @@ impl Simulation {
             self.lattices[0].logging_particles.push(particle_idx);
         }
     }
-
 
     #[allow(dead_code)]
     pub fn set_diffusion_rate(&mut self, region: &str, diffusion_rate: f32) {

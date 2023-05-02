@@ -33,7 +33,7 @@ rand_distr = "0.4.3"
 async-executor = "1.4.1"
 ex = "0.1.3"
 cgmath = "0.18"
-tensor-wgpu =  { git = "https://github.com/javirk/tensor-wgpu", rev = "1768173e0d66128b85bf7f87bcc864060ef44e16"}
+tensor-wgpu =  { git = "https://github.com/javirk/tensor-wgpu", rev = "aced60555a6336d66daa1070022e64d55edbf322"}
 ndarray = "0.15.6"
 futures = "0.3.26"
 futures-intrusive = "0.4"

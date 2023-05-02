@@ -56,11 +56,6 @@ pub struct CylindricalShell {
     pub external_radius: f32,
 }
 
-pub struct Regions {
-    pub regions: Tensor3<Region>,
-    pub types: Vec<RegionType>,
-}
-
 pub struct Capsid {
     pub shell_name: String,
     pub interior_name: String,
@@ -69,4 +64,23 @@ pub struct Capsid {
     pub internal_radius: f32,
     pub external_radius: f32,
     pub total_length: f32,
+}
+
+pub struct Regions {
+    pub regions: Tensor3<Region>,
+    pub types: Vec<RegionType>,
+}
+
+impl Regions {
+    pub fn set_value_position(&mut self, value: usize, position: [usize; 3]) {  // TODO: Make usize a T
+        self.regions[[position[0], position[1], position[2]]] = value as Region;  
+    }
+
+    pub fn substract_value_position(&mut self, value: usize, position: [usize; 3]) {  // TODO: Make usize a T
+        self.regions[[position[0], position[1], position[2]]] -= value as Region;  
+    }
+
+    pub fn cell(&self, position: [usize; 3]) -> Region {
+        self.regions[[position[0], position[1], position[2]]]
+    }
 }

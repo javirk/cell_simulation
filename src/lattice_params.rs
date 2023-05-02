@@ -75,6 +75,14 @@ impl LatticeParams {
             min_binding_size: None,
         }
     }
+
+    pub fn add_region(&mut self) {
+        self.raw.n_regions += 1;
+    }
+
+    pub fn remove_region(&mut self) {
+        self.raw.n_regions -= 1;
+    }
 }
 
 impl Params {
