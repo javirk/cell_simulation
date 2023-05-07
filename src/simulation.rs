@@ -290,7 +290,7 @@ impl Simulation {
             },
             RegionType::Capsid { shell_name, interior_name, center, dir, internal_radius, external_radius, total_length } => {
                 // A cylinder and two semispheres
-                assert!(total_length <= 1.);
+                //assert!(total_length <= 1.);
                 let cylinder_length = total_length - 2. * external_radius;
                 let p0 = [
                     center[0] - dir[0] * cylinder_length / 2.,
@@ -339,17 +339,18 @@ impl Simulation {
         self.regions.types.push(RegionType::Cylinder { name: name.to_string(), p0, pf, radius });
         
         let new_region_idx = (self.regions.types.len() - 1) as Region;
-        let res = [self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32];
+        let res = self.lattice_params.get_res_f32();
+        let voxel_size = self.lattice_params.get_voxel_size();
 
-        let ip0 = [p0[0] * res[0], p0[1] * res[1], p0[2] * res[2]];
-        let ipf = [pf[0] * res[0], pf[1] * res[1], pf[2] * res[2]];
-        println!("ip0: {:?}, ipf: {:?}", ip0, ipf);
+        let ip0 = [p0[0] / voxel_size[0], p0[1] / voxel_size[1], p0[2] / voxel_size[2]];
+        let ipf = [pf[0] / voxel_size[0], pf[1] / voxel_size[1], pf[2] / voxel_size[2]];
+        // println!("ip0: {:?}, ipf: {:?}", ip0, ipf);
 
         let v = [ipf[0] - ip0[0], ipf[1] - ip0[1], ipf[2] - ip0[2]];
         let v2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
         let r_const: f32 = radius * radius * v2;
 
-        let voxel_size_squared = res.iter().map(|x|  (1. / *x as f32).pow(2)).collect::<Vec<f32>>();
+        let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
 
         let (mut x, mut y, mut z) = (0., 0., 0.);
         while x < res[0] {
@@ -377,7 +378,7 @@ impl Simulation {
                                        cp[2] * cp[2] * voxel_size_squared[2];
 
                     if cp_norm <= r_const {
-                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
+                        self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
                     }
                     z += 1.;
                 }
@@ -392,26 +393,28 @@ impl Simulation {
     }
 
     fn add_region_cube(&mut self, name: &str, starting_pos: [f32; 3], ending_pos: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
+        // TODO: Use dimensions of the cube
         self.regions.types.push(RegionType::Cube { name: name.to_string(), p0: starting_pos, pf: ending_pos });
         
         assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
         let new_region_idx = (self.regions.types.len() - 1) as Region;
-        let res = (self.lattice_params.raw.res[0] as usize, self.lattice_params.raw.res[1] as usize, self.lattice_params.raw.res[2] as usize);
+        let res = (self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32);
+        let dims = (self.lattice_params.raw.dims[0] as f32, self.lattice_params.raw.dims[1] as f32, self.lattice_params.raw.dims[2] as f32);
         let start = (
-            (starting_pos[0] * res.0 as f32) as usize,
-            (starting_pos[1] * res.1 as f32) as usize,
-            (starting_pos[2] * res.2 as f32) as usize
+            (starting_pos[0] * res.0 / dims.0) as usize,  // Probably dividing here by the dimensions
+            (starting_pos[1] * res.1 / dims.1) as usize,
+            (starting_pos[2] * res.2 / dims.2) as usize
         );
         let end = (
-            (ending_pos[0] * res.0 as f32) as usize,
-            (ending_pos[1] * res.1 as f32) as usize,
-            (ending_pos[2] * res.2 as f32) as usize
+            (ending_pos[0] * res.0 / dims.0) as usize,
+            (ending_pos[1] * res.1 / dims.1) as usize,
+            (ending_pos[2] * res.2 / dims.2) as usize
         );
 
         for x in start.0..end.0 {
             for y in start.1..end.1 {
                 for z in start.2..end.2 {
-                    self.regions.regions[[x, y, z]] = new_region_idx;
+                    self.regions.set_value_position(new_region_idx, [x, y, z]);
                 }
             }
         }
@@ -420,17 +423,19 @@ impl Simulation {
 
     fn add_region_sphere(&mut self, name: &str, center: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
         self.regions.types.push(RegionType::Sphere { name: name.to_string(), center: center, radius: radius });
-        let res = [self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32];
+        let res = self.lattice_params.get_res_f32();
         let new_region_idx = (self.regions.types.len() - 1) as Region;
+        let voxel_size = self.lattice_params.get_voxel_size();
 
         let center = (
-            center[0] * res[0] as f32,
-            center[1] * res[1] as f32,
-            center[2] * res[2] as f32
+            center[0] / voxel_size[0],
+            center[1] / voxel_size[1],
+            center[2] / voxel_size[2]
         );
         let radius_squared = radius.powf(2.);
         //let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
-        let voxel_size_squared = res.iter().map(|x|  (1. / *x as f32).pow(2)).collect::<Vec<f32>>();
+        
+        let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
 
         let (mut x, mut y, mut z) = (0., 0., 0.);
         while x < res[0] {
@@ -440,7 +445,7 @@ impl Simulation {
                                     (y - center.1).pow(2) * voxel_size_squared[1] +
                                     (z - center.2).pow(2) * voxel_size_squared[2];
                     if dist < radius_squared {
-                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
+                        self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
                     }
                     z += 1.;
                 }
@@ -457,14 +462,15 @@ impl Simulation {
     fn add_region_semisphere(&mut self, name: &str, center: [f32; 3], radius: f32, direction: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
         self.regions.types.push(RegionType::SemiSphere { name: name.to_string(), center, radius, direction });
         let res = [self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32];
+        let voxel_size = self.lattice_params.get_voxel_size();
 
         let center = (
-            center[0] * res[0] as f32,
-            center[1] * res[1] as f32,
-            center[2] * res[2] as f32
+            center[0] / voxel_size[0],
+            center[1] / voxel_size[1],
+            center[2] / voxel_size[2]
         );
         let radius_squared = radius.powf(2.);
-        let voxel_size_squared = res.iter().map(|x|  (1. / *x as f32).pow(2)).collect::<Vec<f32>>();
+        let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
         
         let new_region_idx = (self.regions.types.len() - 1) as Region;
         let (mut x, mut y, mut z) = (0., 0., 0.);
@@ -479,7 +485,7 @@ impl Simulation {
                                     (y - center.1).pow(2) * voxel_size_squared[1] +
                                     (z - center.2).pow(2) * voxel_size_squared[2];
                     if dist < radius_squared {
-                        self.regions.regions[[x as usize, y as usize, z as usize]] = new_region_idx;
+                        self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
                     }
                     z += 1.;
                 }
@@ -505,8 +511,8 @@ impl Simulation {
     }
 
     fn join_regions(&mut self, region_delete: &str, to_region: &str) {
-        let region_delete_idx = self.find_region_index(region_delete).expect("Region not found");
-        let to_region_idx = self.find_region_index(to_region).expect("Region not found");
+        let region_delete_idx = self.find_region_index(region_delete).expect("Region not found") as Region;
+        let to_region_idx = self.find_region_index(to_region).expect("Region not found") as Region;
 
         let res = [
             self.lattice_params.raw.res[0] as usize, 
@@ -517,10 +523,10 @@ impl Simulation {
         for x in 0..res[0] {
             for y in 0..res[1] {
                 for z in 0..res[2] {
-                    if self.regions.cell([x, y, z]) == region_delete_idx as Region {
+                    if self.regions.cell([x, y, z]) == region_delete_idx {
                         self.regions.set_value_position(to_region_idx, [x, y, z]);
                     }
-                    if self.regions.cell([x, y, z]) > region_delete_idx as Region {
+                    if self.regions.cell([x, y, z]) > region_delete_idx {
                         self.regions.substract_value_position(1, [x, y, z]);
                     }
                 }
@@ -528,11 +534,11 @@ impl Simulation {
         }
 
         // Update the regions matrix: region_keep can be removed
-        self.diffusion_matrix.remove_element_at(0, region_delete_idx);
-        self.diffusion_matrix.remove_element_at(1, region_delete_idx);
+        self.diffusion_matrix.remove_element_at(0, region_delete_idx as usize);
+        self.diffusion_matrix.remove_element_at(1, region_delete_idx as usize);
         self.lattice_params.remove_region();
 
-        self.regions.types.remove(region_delete_idx);
+        self.regions.types.remove(region_delete_idx as usize);
 
     }
 

@@ -51,7 +51,7 @@ fn vs_main(
 
 fn get_normal(center: vec3<f32>, hit_point: vec3<f32>) -> vec3<f32> {
     var distance_vec: vec3<f32> = hit_point - center;
-    distance_vec = distance_vec * vec3<f32>(unif.res);
+    distance_vec = distance_vec * vec3<f32>(unif.res) * unif.dims;
     var vector_positive = abs(distance_vec);
     if (vector_positive.x > vector_positive.y) && (vector_positive.x > vector_positive.z) {
         return vec3<f32>(sign(distance_vec.x), 0., 0.);
@@ -64,10 +64,11 @@ fn get_normal(center: vec3<f32>, hit_point: vec3<f32>) -> vec3<f32> {
 
 
 fn get_voxel_center(voxel: vec3<i32>) -> vec3<f32> {
+    // Find a way to make this function more efficient. It is shared by all the shaders changing only the voxel number.
     return vec3<f32>(
-        (f32(voxel.x) + 0.5) / (f32(unif.res.x) / 2.) - 1.,
-        (f32(voxel.y) + 0.5) / (f32(unif.res.y) / 2.) - 1.,
-        (f32(voxel.z) + 0.5) / (f32(unif.res.z) / 2.) - 1.,
+        (f32(voxel.x) + 0.5) / (f32(unif.res.x) / (2. * unif.dims.x)) - unif.dims.x,
+        (f32(voxel.y) + 0.5) / (f32(unif.res.y) / (2. * unif.dims.y)) - unif.dims.y,
+        (f32(voxel.z) + 0.5) / (f32(unif.res.z) / (2. * unif.dims.z)) - unif.dims.z,
     );
 }
 
@@ -204,12 +205,12 @@ fn rayDirection(lookfrom: vec3<f32>, lookat: vec3<f32>, up: vec3<f32>, fov: f32,
 
 fn trivial_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>, K_s: vec3<f32>, shininess: f32, lookfrom: vec3<f32>) -> vec4<f32> {
     var pos: vec3<f32> = pos;
-    for (var i: i32 = 0; i < 20000; i++) {
+    for (var i: i32 = 0; i < 2000; i++) {
         
         var sampling_point: vec3<i32> = vec3<i32>(
-            i32((pos.x + 1.) * (f32(unif.res.x) / 2. - 1e-3)),
-            i32((pos.y + 1.) * (f32(unif.res.y) / 2. - 1e-3)),
-            i32((pos.z + 1.) * (f32(unif.res.z) / 2. - 1e-3)),
+            i32((pos.x + unif.dims.x) * (f32(unif.res.x) / 2. - 1e-3)),
+            i32((pos.y + unif.dims.y) * (f32(unif.res.y) / 2. - 1e-3)),
+            i32((pos.z + unif.dims.z) * (f32(unif.res.z) / 2. - 1e-3)),
         );
         var sample: f32 = textureLoad(texture, sampling_point).r;
         if (sample > 0.) {
@@ -217,32 +218,34 @@ fn trivial_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f3
             var normal = get_normal(center, pos);
             var object_color = color_map(sample);        
             var color = phongIllumination(K_a, K_d, K_s, shininess, pos, lookfrom, normal, object_color);
-            //color = vec3<f32>(1., 0., 0.);
+            color = vec3<f32>(1., 0., 0.);
             return vec4<f32>(color, 1.0);
         }
 
-        pos = pos + dir * 0.0001;
+        pos = pos + dir * 0.001;
         // Check if the position is out of the borders
-        if (pos.x < -1. || pos.x > 1. || pos.y < -1. || pos.y > 1. || pos.z < -1. || pos.z > 1.) {
-            return vec4<f32>(0., 0., 0., 1.);
+        if (pos.x < -unif.dims.x || pos.x > unif.dims.x || pos.y < -unif.dims.y || pos.y > unif.dims.y || pos.z < -unif.dims.z || pos.z > unif.dims.z) {
+            return vec4<f32>(1., 0., 1., 1.);
         }
     }
-    return vec4<f32>(0.,0., 0., 1.0);
+    return vec4<f32>(1.,1.,1., 1.0);
 }
 
 fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>, K_s: vec3<f32>, shininess: f32, lookfrom: vec3<f32>) -> vec4<f32> {
     var texture_resolution = vec3<f32>(unif.res);
-    var voxel_size = 2./ texture_resolution;
-    var i_voxel: vec3<i32> = clamp(vec3<i32>((pos + 1.) / 2. * texture_resolution), vec3(0, 0, 0), vec3<i32>(unif.res) - 1);
+    var voxel_size =  unif.dims * 2. / texture_resolution;
+    // var i_voxel: vec3<i32> = clamp(vec3<i32>((pos + 1.) / 2. * texture_resolution), vec3(0, 0, 0), vec3<i32>(unif.res) - 1);
+    // var i_voxel: vec3<i32> = clamp(vec3<i32>((pos + 1.) / voxel_size), vec3(0, 0, 0), vec3<i32>(texture_resolution) - 1);
+    var i_voxel: vec3<i32> = clamp(vec3<i32>((pos + unif.dims) / voxel_size), vec3(0, 0, 0), vec3<i32>(texture_resolution) - 1);
     var dir_sign: vec3<f32> = sign(dir);
     var unitstepsize: vec3<f32> = voxel_size * dir_sign / dir;
     var bound: vec3<f32> = (vec3<f32>(i_voxel) + clamp(dir_sign, vec3(0., 0., 0.), vec3(1., 1., 1.))) / texture_resolution;
-    bound = bound * 2. - 1.;
+    bound = bound * 2. * unif.dims - unif.dims;
     var ray_length = abs(bound - pos) * unitstepsize / voxel_size;
 
     var distance: f32 = 0.;
 
-    for(var i: i32 = 0; i < 128; i++) {
+    for(var i: i32 = 0; i < 256; i++) {
         var sample: f32 = textureLoad(texture, i_voxel).r;
         if (sample > 0.) {
             var new_pos = pos + dir * distance;
@@ -250,6 +253,7 @@ fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>,
             var normal = get_normal(center, new_pos);
             var object_color = color_map(sample);  
             var color = phongIllumination(K_a, K_d, K_s, shininess, new_pos, lookfrom, normal, object_color);
+            //color = vec3<f32>(f32(i) / 256., 0., 0.);
             return vec4<f32>(color, 1.0);
         }
 
@@ -275,7 +279,7 @@ fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>,
             }
         }
 
-        if (i_voxel.x < 0 || i_voxel.x >= i32(unif.res.x) || i_voxel.y < 0 || i_voxel.y >= i32(unif.res.y) || i_voxel.z < 0 || i_voxel.z >= i32(unif.res.z)) {
+        if (i_voxel.x < 0 || i_voxel.x >= i32(texture_resolution.x) || i_voxel.y < 0 || i_voxel.y >= i32(texture_resolution.y) || i_voxel.z < 0 || i_voxel.z >= i32(texture_resolution.z)) {
             return vec4<f32>(1., 1., 1., 1.);
         }
     }
@@ -289,6 +293,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var lookfrom = camera.eye;
     var up: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
     var dir: vec3<f32> = rayDirection(lookfrom, lookat, up, 75.0, in.tex_pos.xy);
+    var lattice_dims = unif.dims;
 
     // TODO: Put all this into a light struct
     var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
@@ -297,7 +302,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var shininess: f32 = 2.0;
     
     // We start outside of the volume, so we need to find the first intersection. If there is none, the pixel is black.
-    var t: vec2<f32> = intersectAABB(lookfrom, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
+    var t: vec2<f32> = intersectAABB(lookfrom, dir, -lattice_dims, lattice_dims); // TODO: Change this to use the dimensions
     if (t.x > t.y) {
         return vec4<f32>(1.0, 1.0, 1.0, 1.0);
     }
@@ -305,5 +310,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var bound: vec3<f32> = lookfrom + dir * t.y;
 
     return fast_marching(pos, dir, K_a, K_d, K_s, shininess, lookfrom);
-    // return trivial_marching(pos, dir, K_a, K_d, K_s, shininess, lookfrom);
+    //return trivial_marching(pos, dir, K_a, K_d, K_s, shininess, lookfrom);
 }

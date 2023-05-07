@@ -72,12 +72,12 @@ pub struct Regions {
 }
 
 impl Regions {
-    pub fn set_value_position(&mut self, value: usize, position: [usize; 3]) {  // TODO: Make usize a T
-        self.regions[[position[0], position[1], position[2]]] = value as Region;  
+    pub fn set_value_position(&mut self, value: Region, position: [usize; 3]) {  // TODO: Make usize a T
+        self.regions[[position[0], position[1], position[2]]] = value;  
     }
 
-    pub fn substract_value_position(&mut self, value: usize, position: [usize; 3]) {  // TODO: Make usize a T
-        self.regions[[position[0], position[1], position[2]]] -= value as Region;  
+    pub fn substract_value_position(&mut self, value: Region, position: [usize; 3]) {  // TODO: Make usize a T
+        self.regions[[position[0], position[1], position[2]]] -= value;  
     }
 
     pub fn cell(&self, position: [usize; 3]) -> Region {

@@ -83,6 +83,26 @@ impl LatticeParams {
     pub fn remove_region(&mut self) {
         self.raw.n_regions -= 1;
     }
+
+    pub fn get_res(&self) -> [u32; 3] {
+        self.raw.res
+    }
+
+    pub fn get_res_f32(&self) -> [f32; 3] {
+        [
+            self.raw.res[0] as f32,
+            self.raw.res[1] as f32,
+            self.raw.res[2] as f32
+        ]
+    }
+
+    pub fn get_voxel_size(&self) -> [f32; 3] {
+        [
+            self.raw.dims[0] / self.raw.res[0] as f32, 
+            self.raw.dims[1] / self.raw.res[1] as f32,
+            self.raw.dims[2] / self.raw.res[2] as f32
+        ]
+    }
 }
 
 impl Params {

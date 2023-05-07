@@ -22,7 +22,7 @@ pub struct CameraUniform {
 impl CameraUniform {
     pub fn new() -> Self {
         Self {
-            eye: cgmath::Point3::new(0.0, 0.0, 5.0).into(),
+            eye: cgmath::Point3::new(0.0, 0.0, 2.0).into(),
             _padding: 0,
             target: cgmath::Point3::new(0.0, 0.0, 0.0).into(),
             _padding2: 0,
@@ -49,6 +49,7 @@ pub struct CameraController {
 
 impl CameraController {
     pub fn new(speed: f32) -> Self {
+        // TODO: Implement zooming. I think this also applies to the renderer code
         Self {
             speed,
             is_up_pressed: false,
