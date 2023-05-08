@@ -53,11 +53,13 @@ impl Simulation {
             lattices.push(Lattice::new(&lattice_params.raw))
         }
 
-        let shape_regions = (lattice_params.raw.res[0] as usize, lattice_params.raw.res[1] as usize, lattice_params.raw.res[2] as usize).f();
+        let shape_regions = lattice_params.get_res_usize().f();
+        let initial_volume = lattice_params.res().iter().product::<u32>();
 
         let regions = Regions {
             regions: Tensor3::<Region>::zeros(shape_regions),
-            types: vec![RegionType::Cube { name: "background".to_string(), p0: [0.; 3], pf: [1.; 3] }],
+            types: vec![RegionType::Cube { name: "background".to_string(), p0: [0.; 3], pf: lattice_params.dims() }],
+            volumes: vec![initial_volume]
         };
 
         let reaction_params = ReactionParams::new(0, 0);
@@ -321,6 +323,17 @@ impl Simulation {
         }
     }
 
+    pub fn add_sparse_region(&mut self, reg: RegionType, to_region: &str, max_volume: u32, diffusion_rate: f32) {
+        let to_region_idx = self.find_region_index(to_region).unwrap();
+        assert!(self.regions.volumes[to_region_idx] > max_volume);
+        let transition_rate: f32 = 0.; //8.15E-14 / 6.;
+
+        let mut curr_volume = 0u32;
+        while curr_volume < max_volume {
+            todo!("Add sparse region");
+        }
+    }
+
     fn update_matrices_region(&mut self, diffusion_rate: f32, transition_rate: f32) {
         // Add the region to the diffusion matrix. 
         self.diffusion_matrix.enlarge_dimension(0, transition_rate);
@@ -351,7 +364,7 @@ impl Simulation {
         let r_const: f32 = radius * radius * v2;
 
         let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
-
+        let mut volume = 0u32;
         let (mut x, mut y, mut z) = (0., 0., 0.);
         while x < res[0] {
             while y < res[1] {
@@ -379,6 +392,7 @@ impl Simulation {
 
                     if cp_norm <= r_const {
                         self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
+                        volume += 1;
                     }
                     z += 1.;
                 }
@@ -390,6 +404,7 @@ impl Simulation {
         }
 
         self.update_matrices_region(diffusion_rate, transition_rate);
+        self.regions.volumes.push(volume);
     }
 
     fn add_region_cube(&mut self, name: &str, starting_pos: [f32; 3], ending_pos: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
@@ -398,18 +413,20 @@ impl Simulation {
         
         assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
         let new_region_idx = (self.regions.types.len() - 1) as Region;
-        let res = (self.lattice_params.raw.res[0] as f32, self.lattice_params.raw.res[1] as f32, self.lattice_params.raw.res[2] as f32);
-        let dims = (self.lattice_params.raw.dims[0] as f32, self.lattice_params.raw.dims[1] as f32, self.lattice_params.raw.dims[2] as f32);
+        let voxel_size = self.lattice_params.get_voxel_size();
+        
         let start = (
-            (starting_pos[0] * res.0 / dims.0) as usize,  // Probably dividing here by the dimensions
-            (starting_pos[1] * res.1 / dims.1) as usize,
-            (starting_pos[2] * res.2 / dims.2) as usize
+            (starting_pos[0] / voxel_size[0]) as usize,  // Probably dividing here by the dimensions
+            (starting_pos[1] / voxel_size[1]) as usize,
+            (starting_pos[2] / voxel_size[2]) as usize
         );
         let end = (
-            (ending_pos[0] * res.0 / dims.0) as usize,
-            (ending_pos[1] * res.1 / dims.1) as usize,
-            (ending_pos[2] * res.2 / dims.2) as usize
+            (ending_pos[0] / voxel_size[0]) as usize,
+            (ending_pos[1] / voxel_size[1]) as usize,
+            (ending_pos[2] / voxel_size[2]) as usize
         );
+
+        let volume = (end.0 - start.0) * (end.1 - start.1) * (end.2 - start.2);
 
         for x in start.0..end.0 {
             for y in start.1..end.1 {
@@ -419,6 +436,7 @@ impl Simulation {
             }
         }
         self.update_matrices_region(diffusion_rate, transition_rate);
+        self.regions.volumes.push(volume as u32);
     }
 
     fn add_region_sphere(&mut self, name: &str, center: [f32; 3], radius: f32, diffusion_rate: f32, transition_rate: f32) {
@@ -436,7 +454,7 @@ impl Simulation {
         //let iradius = (radius * res.0 as f32) as i32; //TODO: Use real measurements
         
         let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
-
+        let mut volume = 0u32;
         let (mut x, mut y, mut z) = (0., 0., 0.);
         while x < res[0] {
             while y < res[1] {
@@ -446,6 +464,7 @@ impl Simulation {
                                     (z - center.2).pow(2) * voxel_size_squared[2];
                     if dist < radius_squared {
                         self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
+                        volume += 1;
                     }
                     z += 1.;
                 }
@@ -455,8 +474,8 @@ impl Simulation {
             y = 0.;
             x += 1.;
         }
-
         self.update_matrices_region(diffusion_rate, transition_rate);
+        self.regions.volumes.push(volume);
     }
 
     fn add_region_semisphere(&mut self, name: &str, center: [f32; 3], radius: f32, direction: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
@@ -474,6 +493,7 @@ impl Simulation {
         
         let new_region_idx = (self.regions.types.len() - 1) as Region;
         let (mut x, mut y, mut z) = (0., 0., 0.);
+        let mut volume = 0u32;
         while x < res[0] {
             while y < res[1] {
                 while z < res[2] {
@@ -486,6 +506,7 @@ impl Simulation {
                                     (z - center.2).pow(2) * voxel_size_squared[2];
                     if dist < radius_squared {
                         self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
+                        volume += 1;
                     }
                     z += 1.;
                 }
@@ -496,6 +517,7 @@ impl Simulation {
             x += 1.;
         }
         self.update_matrices_region(diffusion_rate, transition_rate);
+        self.regions.volumes.push(volume);
     }
 
     fn find_region_index(&mut self, name: &str) -> Option<usize> {
@@ -538,7 +560,7 @@ impl Simulation {
         self.diffusion_matrix.remove_element_at(1, region_delete_idx as usize);
         self.lattice_params.remove_region();
 
-        self.regions.types.remove(region_delete_idx as usize);
+        self.regions.remove_region(region_delete_idx as usize);
 
     }
 

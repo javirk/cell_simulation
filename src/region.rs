@@ -69,6 +69,7 @@ pub struct Capsid {
 pub struct Regions {
     pub regions: Tensor3<Region>,
     pub types: Vec<RegionType>,
+    pub volumes: Vec<u32>,
 }
 
 impl Regions {
@@ -82,5 +83,10 @@ impl Regions {
 
     pub fn cell(&self, position: [usize; 3]) -> Region {
         self.regions[[position[0], position[1], position[2]]]
+    }
+
+    pub fn remove_region(&mut self, idx: usize) {
+        self.types.remove(idx);
+        self.volumes.remove(idx);
     }
 }

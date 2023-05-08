@@ -84,8 +84,20 @@ impl LatticeParams {
         self.raw.n_regions -= 1;
     }
 
-    pub fn get_res(&self) -> [u32; 3] {
+    pub fn res(&self) -> [u32; 3] {
         self.raw.res
+    }
+
+    pub fn dims(&self) -> [f32; 3] {
+        self.raw.dims
+    }
+
+    pub fn get_res_usize(&self) -> [usize; 3] {
+        [
+            self.raw.res[0] as usize,
+            self.raw.res[1] as usize,
+            self.raw.res[2] as usize
+        ]
     }
 
     pub fn get_res_f32(&self) -> [f32; 3] {
