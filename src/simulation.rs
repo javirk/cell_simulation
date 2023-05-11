@@ -322,22 +322,63 @@ impl Simulation {
         }
     }
 
-    pub fn add_sparse_region(&mut self, reg: RegionType, to_region: &str, max_volume: u32, diffusion_rate: f32) {
+    pub fn add_sparse_region(&mut self, name: &str, base_region: RegionType, to_region: &str, max_volume: u32, diffusion_rate: f32) {
         let to_region_idx = self.find_region_index(to_region).unwrap();
-        let to_region = self.regions.get_region(to_region_idx);
         assert!(self.regions.volumes[to_region_idx] > max_volume);
+
         let transition_rate: f32 = 0.; //8.15E-14 / 6.;
+        let voxel_size = self.lattice_params.get_voxel_size();
+
+        let radius = match base_region {
+            RegionType::Sphere { name, center, radius } => {
+                radius
+            },
+            _ => panic!("Only spheres can be added as sparse regions")
+        };
+        let radius_voxels = voxel_size.iter().map(|&x| (radius / x) as usize).collect::<Vec<usize>>();
 
         let mut curr_volume = 0u32;
-        while curr_volume < max_volume {
+        let mut retries = 0u32;
+        while (curr_volume < max_volume) || (retries > 100) {
             // Steps:
             // 1. Generate a random point inside the region.
             // 2. Check if the point or the surroundings belong to the region. If not, return to 1.
-            // 3. Add the point to the region. TODO: This should be a method of the region
-            // 4. Add the point to the diffusion matrix. TODO: This should be a method of the diffusion matrix
+            // 3. Make sure that the whole base_region fits inside the to_region. If not, return to 1.
+            // 4. Add the point to the region. TODO: This should be a method of the region
             
-            let point = to_region.generate();
+            let point = self.regions.types[to_region_idx].generate_usize();
+            if self.regions.get_value_position(point) as usize != to_region_idx {
+                retries += 1;
+                continue;
+            }
+
+            // Make sure it fits
+            let mut data = self.regions.regions.data.slice(
+                s![point[0] - radius_voxels[0]..point[0] + radius_voxels[0], 
+                point[1] - radius_voxels[1]..point[1] + radius_voxels[1], 
+                point[2] - radius_voxels[2]..point[2] + radius_voxels[2]]
+            );  // This is a very ugly and hacky way of slicing the tensor, but it's probably the fastest
+
+            if data.sum() != (to_region_idx * data.len()) as u32 {
+                // The whole base region doesn't fit inside the to_region
+                retries += 1;
+                continue;
+            }
+
+            // Add the region iterating over the tensor
+            for i in point[0] - radius_voxels[0]..point[0] + radius_voxels[0] {
+                for j in point[1] - radius_voxels[1]..point[1] + radius_voxels[1] {
+                    for k in point[2] - radius_voxels[2]..point[2] + radius_voxels[2] {
+                        self.regions.set_value_position(to_region_idx as u32, [i, j, k]);
+                        curr_volume += 1;
+                    }
+                }
+            }
         }
+        let base_region = RegionType::Sphere { name: name.to_string(), center: [0.; 3], radius: radius };
+        self.regions.types.push(RegionType::Sparse { name: name.to_string(), base_region: base_region });
+        self.update_matrices_region(diffusion_rate, transition_rate);
+        self.regions.volumes.push(curr_volume);
     }
 
     fn update_matrices_region(&mut self, diffusion_rate: f32, transition_rate: f32) {
