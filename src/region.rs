@@ -1,4 +1,6 @@
 use tensor_wgpu::Tensor3;
+use rand::{Rng, distributions::Uniform};
+
 use crate::types::Region;
 
 #[derive(Debug)]
@@ -66,6 +68,11 @@ pub struct Capsid {
     pub total_length: f32,
 }
 
+pub struct Sparse {
+    pub name: String,
+    pub base_region: RegionType,
+}
+
 pub struct Regions {
     pub regions: Tensor3<Region>,
     pub types: Vec<RegionType>,
@@ -88,5 +95,58 @@ impl Regions {
     pub fn remove_region(&mut self, idx: usize) {
         self.types.remove(idx);
         self.volumes.remove(idx);
+    }
+
+    pub fn get_region(&self, idx: usize) -> &RegionType {
+        &self.types[idx]
+    }
+}
+
+pub trait Random {
+    fn generate(&self) -> [f32; 3];
+}
+
+impl Random for RegionType {
+    fn generate(&self) -> [f32; 3] {
+        use RegionType::*;
+        match *self {
+            Cube { name, p0, pf } => {
+                let mut rng = rand::thread_rng();
+                let x = rng.gen_range(p0[0]..pf[0]);
+                let y = rng.gen_range(p0[1]..pf[1]);
+                let z = rng.gen_range(p0[2]..pf[2]);
+                [x, y, z]
+            },
+            Sphere { name, center, radius } => {
+                let mut rng = rand::thread_rng();
+                let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);
+                let phi = rng.gen_range(0.0..std::f32::consts::PI);
+                let r = rng.gen_range(0.0..radius);
+                let x = r * theta.cos() * phi.sin() + center[0];
+                let y = r * theta.sin() * phi.sin() + center[1];
+                let z = r * phi.cos() + center[2];
+                [x, y, z]
+            },
+            SemiSphere { name, center, radius, direction } => {
+                let mut rng = rand::thread_rng();
+                let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);
+                let phi = rng.gen_range(0.0..std::f32::consts::PI);
+                let r = rng.gen_range(0.0..radius);
+                let x = r * theta.cos() * phi.sin() + center[0];
+                let y = r * theta.sin() * phi.sin() + center[1];
+                let z = r * phi.cos() + center[2];
+                [x, y, z]
+            },
+            Cylinder { name, p0, pf, radius } => {
+                let mut rng = rand::thread_rng();
+                let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);
+                let r = rng.gen_range(0.0..radius);
+                let x = r * theta.cos() + p0[0];
+                let y = r * theta.sin() + p0[1];
+                let z = rng.gen_range(p0[2]..pf[2]);
+                [x, y, z]
+            },
+            _ => [0.0, 0.0, 0.0],
+        }
     }
 }

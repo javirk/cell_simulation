@@ -1,5 +1,5 @@
-use std::{collections::{VecDeque, HashMap}, sync::Arc};
-use cgmath::{assert_relative_eq, num_traits::Pow};
+use std::{collections::{VecDeque, HashMap}};
+use cgmath::num_traits::Pow;
 use futures::Future;
 use futures::*;
 
@@ -12,12 +12,11 @@ use crate::{
     lattice_params::LatticeParams, 
     lattice::Lattice,
     uniforms::UniformBuffer, types::{Region, Particle},
-    WORKGROUP_SIZE,
     preprocessor::ShaderBuilder,
     cme::CME,
     reactions_params::ReactionParams,
     statistics::{StatisticsGroup, SolverStatisticSample},
-    region::{RegionType, Regions}
+    region::{RegionType, Regions, Random}
 };
 
 
@@ -325,12 +324,19 @@ impl Simulation {
 
     pub fn add_sparse_region(&mut self, reg: RegionType, to_region: &str, max_volume: u32, diffusion_rate: f32) {
         let to_region_idx = self.find_region_index(to_region).unwrap();
+        let to_region = self.regions.get_region(to_region_idx);
         assert!(self.regions.volumes[to_region_idx] > max_volume);
         let transition_rate: f32 = 0.; //8.15E-14 / 6.;
 
         let mut curr_volume = 0u32;
         while curr_volume < max_volume {
-            todo!("Add sparse region");
+            // Steps:
+            // 1. Generate a random point inside the region.
+            // 2. Check if the point or the surroundings belong to the region. If not, return to 1.
+            // 3. Add the point to the region. TODO: This should be a method of the region
+            // 4. Add the point to the diffusion matrix. TODO: This should be a method of the diffusion matrix
+            
+            let point = to_region.generate();
         }
     }
 
@@ -408,7 +414,6 @@ impl Simulation {
     }
 
     fn add_region_cube(&mut self, name: &str, starting_pos: [f32; 3], ending_pos: [f32; 3], diffusion_rate: f32, transition_rate: f32) {
-        // TODO: Use dimensions of the cube
         self.regions.types.push(RegionType::Cube { name: name.to_string(), p0: starting_pos, pf: ending_pos });
         
         assert!(starting_pos[0] <= ending_pos[0] && starting_pos[1] <= ending_pos[1] && starting_pos[2] <= ending_pos[2]);
