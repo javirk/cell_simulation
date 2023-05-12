@@ -16,7 +16,7 @@ use crate::{
     cme::CME,
     reactions_params::ReactionParams,
     statistics::{StatisticsGroup, SolverStatisticSample},
-    region::{RegionType, Regions, Random}
+    region::{RegionType, Regions, Random, Sphere}
 };
 
 
@@ -328,6 +328,7 @@ impl Simulation {
 
         let transition_rate: f32 = 0.; //8.15E-14 / 6.;
         let voxel_size = self.lattice_params.get_voxel_size();
+        let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
 
         let radius = match base_region {
             RegionType::Sphere { name, center, radius } => {
@@ -337,23 +338,27 @@ impl Simulation {
         };
         let radius_voxels = voxel_size.iter().map(|&x| (radius / x) as usize).collect::<Vec<usize>>();
 
+        let new_region_idx = self.regions.types.len() as Region;
+
         let mut curr_volume = 0u32;
         let mut retries = 0u32;
-        while (curr_volume < max_volume) || (retries > 100) {
+        let mut added = false;
+        while (curr_volume < max_volume) && (retries < 10) {
             // Steps:
             // 1. Generate a random point inside the region.
             // 2. Check if the point or the surroundings belong to the region. If not, return to 1.
             // 3. Make sure that the whole base_region fits inside the to_region. If not, return to 1.
             // 4. Add the point to the region. TODO: This should be a method of the region
             
-            let point = self.regions.types[to_region_idx].generate_usize();
+            let point = self.regions.types[to_region_idx].generate_lattice(voxel_size);
+            println!("Point: {:?}", point);
             if self.regions.get_value_position(point) as usize != to_region_idx {
                 retries += 1;
                 continue;
             }
 
             // Make sure it fits
-            let mut data = self.regions.regions.data.slice(
+            let data = self.regions.regions.data.slice(
                 s![point[0] - radius_voxels[0]..point[0] + radius_voxels[0], 
                 point[1] - radius_voxels[1]..point[1] + radius_voxels[1], 
                 point[2] - radius_voxels[2]..point[2] + radius_voxels[2]]
@@ -369,16 +374,27 @@ impl Simulation {
             for i in point[0] - radius_voxels[0]..point[0] + radius_voxels[0] {
                 for j in point[1] - radius_voxels[1]..point[1] + radius_voxels[1] {
                     for k in point[2] - radius_voxels[2]..point[2] + radius_voxels[2] {
-                        self.regions.set_value_position(to_region_idx as u32, [i, j, k]);
-                        curr_volume += 1;
+                        let dist: f32 = (i.abs_diff(point[0]) as f32).pow(2.) * voxel_size_squared[0] + 
+                                        (j.abs_diff(point[1]) as f32).pow(2.) * voxel_size_squared[1] +
+                                        (k.abs_diff(point[2]) as f32).pow(2.) * voxel_size_squared[2];
+                        if dist < (radius * radius) {
+                            self.regions.set_value_position(new_region_idx, [i, j, k]);
+                            curr_volume += 1;
+                        }
                     }
                 }
             }
+            added = true;
         }
-        let base_region = RegionType::Sphere { name: name.to_string(), center: [0.; 3], radius: radius };
-        self.regions.types.push(RegionType::Sparse { name: name.to_string(), base_region: base_region });
-        self.update_matrices_region(diffusion_rate, transition_rate);
-        self.regions.volumes.push(curr_volume);
+
+        if added {
+            let base_region = Sphere { name: name.to_string(), center: [0.; 3], radius: radius };
+            self.regions.types.push(RegionType::Sparse { name: name.to_string(), base_region: base_region });
+            self.update_matrices_region(diffusion_rate, transition_rate);
+            self.regions.volumes.push(curr_volume);
+        } else {
+            panic!("Could not add sparse region");
+        }
     }
 
     fn update_matrices_region(&mut self, diffusion_rate: f32, transition_rate: f32) {
@@ -391,7 +407,7 @@ impl Simulation {
             self.diffusion_matrix[[num_regions, num_regions, i_part]] = diffusion_rate;
         }
 
-        println!("Region added. New diffusion matrix: {}", self.diffusion_matrix);
+        // println!("Region added. New diffusion matrix: {}", self.diffusion_matrix);
         self.lattice_params.add_region(); // TODO: This must be a method of lattice params
     }
 
@@ -573,6 +589,7 @@ impl Simulation {
                 RegionType::Sphere { name: region_name, .. } => { region_name == name },
                 RegionType::Cylinder { name: region_name,.. } => { region_name == name },
                 RegionType::SemiSphere { name: region_name,.. } => { region_name == name },
+                RegionType::Sparse { name: region_name, .. } => { region_name == name },
                 _ => { false }
             }
         })

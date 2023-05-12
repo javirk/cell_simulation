@@ -110,7 +110,7 @@ impl Regions {
 
 pub trait Random {
     fn generate(&self) -> [f32; 3];
-    fn generate_usize(&self) -> [usize; 3];
+    fn generate_lattice(&self, voxel_size: [f32; 3]) -> [usize; 3];
 }
 
 impl Random for RegionType {
@@ -145,6 +145,7 @@ impl Random for RegionType {
                 [x, y, z]
             },
             Cylinder { name, p0, pf, radius } => {
+                println!("Cylinder: {:?}", self);
                 let mut rng = rand::thread_rng();
                 let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);
                 let r = rng.gen_range(0.0..*radius);
@@ -157,8 +158,9 @@ impl Random for RegionType {
         }
     }
 
-    fn generate_usize(&self) -> [usize; 3] {
+    fn generate_lattice(&self, voxel_size: [f32; 3]) -> [usize; 3] {
         let point = self.generate();
-        [point[0] as usize, point[1] as usize, point[2] as usize]
+        println!("Point before: {:?}", point);
+        [(point[0] / voxel_size[0]) as usize, (point[1] / voxel_size[1]) as usize, (point[2] / voxel_size[2]) as usize]
     }
 }
