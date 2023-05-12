@@ -1,6 +1,5 @@
 use wgpu::util::DeviceExt;
 use bytemuck::{Pod, Zeroable};
-use std::mem;
 
 use crate::MAX_PARTICLES_SITE;
 

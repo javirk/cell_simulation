@@ -130,11 +130,13 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     let base_region = RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.25], radius: 0.1 };
     simulation.add_sparse_region("sparse", base_region, "two", 100, 8.15E-14/6.);
 
+    simulation.prepare_regions();
+
     // simulation.add_particle("A", "two", 1000, true);
     // simulation.add_particle("B", "two", 1000, false);
     // simulation.add_particle("C", "two", 0, false);
     // simulation.add_particle("D", "one", 5000, false);
-    simulation.add_particle("E", "sparse", 2, false);
+    simulation.fill_region("E", "sparse", false);
 
     // simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
     // simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);

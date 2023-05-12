@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use tensor_wgpu::Tensor3;
-use rand::{Rng, distributions::Uniform};
+use rand::Rng;
 
 use crate::types::Region;
 
@@ -29,6 +31,7 @@ pub struct Sphere {
     pub radius: f32,
 }
 
+#[allow(dead_code)]
 pub struct SemiSphere {
     pub name: String,
     pub center: [f32; 3],
@@ -36,6 +39,7 @@ pub struct SemiSphere {
     pub direction: [f32; 3],
 }
 
+#[allow(dead_code)]
 pub struct Cylinder {
     pub name: String,
     pub p0: [f32; 3],
@@ -43,6 +47,7 @@ pub struct Cylinder {
     pub radius: f32,
 }
 
+#[allow(dead_code)]
 pub struct SphericalShell {
     pub shell_name: String,
     pub interior_name: String,
@@ -51,6 +56,7 @@ pub struct SphericalShell {
     pub external_radius: f32,
 }
 
+#[allow(dead_code)]
 pub struct CylindricalShell {
     pub shell_name: String,
     pub interior_name: String,
@@ -60,6 +66,7 @@ pub struct CylindricalShell {
     pub external_radius: f32,
 }
 
+#[allow(dead_code)]
 pub struct Capsid {
     pub shell_name: String,
     pub interior_name: String,
@@ -70,6 +77,7 @@ pub struct Capsid {
     pub total_length: f32,
 }
 
+#[allow(dead_code)]
 pub struct Sparse {
     pub name: String,
     pub base_region: Sphere,
@@ -79,6 +87,7 @@ pub struct Regions {
     pub regions: Tensor3<Region>,
     pub types: Vec<RegionType>,
     pub volumes: Vec<u32>,
+    pub index_buffer: Option<HashMap<Region, Vec<u32>>>,
 }
 
 impl Regions {
@@ -103,8 +112,29 @@ impl Regions {
         self.volumes.remove(idx);
     }
 
+    #[allow(dead_code)]
     pub fn get_region(&self, idx: usize) -> &RegionType {
         &self.types[idx]
+    }
+
+    pub fn prepare_regions(&mut self) {
+        let shape = self.regions.shape();
+        let mut index_buffer: HashMap<u32, Vec<u32>> = HashMap::new();
+        for i in 0..shape[0] {
+            for j in 0..shape[1] {
+                for k in 0..shape[2] {
+                    let value_1d = k + j * shape[2] + i * shape[1] * shape[2];
+                    let region = self.regions[[i, j, k]];
+
+                    match index_buffer.get_mut(&region) {
+                        Some(region_list) => region_list.push(value_1d as u32),
+                        None => {
+                            index_buffer.insert(region, vec![value_1d as u32]);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -117,14 +147,14 @@ impl Random for RegionType {
     fn generate(&self) -> [f32; 3] {
         use RegionType::*;
         match *&self {
-            Cube { name, p0, pf } => {
+            Cube { name: _, p0, pf } => {
                 let mut rng = rand::thread_rng();
                 let x = rng.gen_range(p0[0]..pf[0]); // Does this work? They are both &f32
                 let y = rng.gen_range(p0[1]..pf[1]);
                 let z = rng.gen_range(p0[2]..pf[2]);
                 [x, y, z]
             },
-            Sphere { name, center, radius } => {
+            Sphere { name: _, center, radius } => {
                 let mut rng = rand::thread_rng();
                 let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);
                 let phi = rng.gen_range(0.0..std::f32::consts::PI);
@@ -134,7 +164,7 @@ impl Random for RegionType {
                 let z = r * phi.cos() + center[2];
                 [x, y, z]
             },
-            SemiSphere { name, center, radius, direction } => {
+            SemiSphere { name: _, center, radius, direction: _ } => {
                 let mut rng = rand::thread_rng();
                 let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);
                 let phi = rng.gen_range(0.0..std::f32::consts::PI);
@@ -144,7 +174,7 @@ impl Random for RegionType {
                 let z = r * phi.cos() + center[2];
                 [x, y, z]
             },
-            Cylinder { name, p0, pf, radius } => {
+            Cylinder { name: _, p0, pf, radius } => {
                 println!("Cylinder: {:?}", self);
                 let mut rng = rand::thread_rng();
                 let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);

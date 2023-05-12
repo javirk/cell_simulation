@@ -1,7 +1,5 @@
-use std::{collections::{VecDeque, HashMap}};
+use std::collections::{VecDeque, HashMap};
 use cgmath::num_traits::Pow;
-use futures::Future;
-use futures::*;
 
 use tensor_wgpu::{Tensor2, Tensor3, Tensor1};
 use wgpu::{util::DeviceExt};
@@ -58,7 +56,8 @@ impl Simulation {
         let regions = Regions {
             regions: Tensor3::<Region>::zeros(shape_regions),
             types: vec![RegionType::Cube { name: "background".to_string(), p0: [0.; 3], pf: lattice_params.dims() }],
-            volumes: vec![initial_volume]
+            volumes: vec![initial_volume],
+            index_buffer: None,
         };
 
         let reaction_params = ReactionParams::new(0, 0);
@@ -267,6 +266,10 @@ impl Simulation {
 
 // Region and particle methods
 impl Simulation {
+
+    pub fn prepare_regions(&mut self) {
+        self.regions.prepare_regions();
+    }
     
     pub fn add_region(&mut self, reg: RegionType, diffusion_rate: f32) {
         //self.regions.names.push(String::from(name));
@@ -331,7 +334,7 @@ impl Simulation {
         let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
 
         let radius = match base_region {
-            RegionType::Sphere { name, center, radius } => {
+            RegionType::Sphere { name: _, center: _, radius } => {
                 radius
             },
             _ => panic!("Only spheres can be added as sparse regions")
@@ -406,7 +409,6 @@ impl Simulation {
         for i_part in 0..num_particles {
             self.diffusion_matrix[[num_regions, num_regions, i_part]] = diffusion_rate;
         }
-
         // println!("Region added. New diffusion matrix: {}", self.diffusion_matrix);
         self.lattice_params.add_region(); // TODO: This must be a method of lattice params
     }
@@ -635,19 +637,27 @@ impl Simulation {
 
         self.lattices[0].particle_names.push(String::from(name));
 
-        // let region_type = &self.regions.types[region_idx];
-        // match region_type {
-        //     RegionType::Cube { name, p0, pf } => {        
-        //         self.lattices[0].init_random_particles_cube(particle_idx, count, &p0, &pf);
-        //     },
-        //     RegionType::Sphere { name, center, radius } => {
-        //         self.lattices[0].init_random_particles_sphere(particle_idx, count, &center, *radius);
-        //     },
-        //     _ => { self.lattices[0].init_random_particles_region(particle_idx, count, &self.regions.regions, region_idx as u32); }
-        // }
+        let regions_idx_buffer = &self.regions.index_buffer.as_ref().unwrap()[&(region_idx as u32)];
 
-        self.lattices[0].init_random_particles_region(particle_idx, count, &self.regions.regions, region_idx as u32);
+        self.lattices[0].init_random_particles_region(particle_idx, count, regions_idx_buffer);
 
+        // Update the diffusion matrix
+        self.diffusion_matrix.copy_dimension(2);
+
+        // Add one column to stoichiometry matrix.
+        self.stoichiometry_matrix.enlarge_dimension(1, 0);
+        self.reaction_params.raw_params.num_species += 1;
+        if logging {
+            self.lattices[0].logging_particles.push(particle_idx);
+        }
+    }
+
+    pub fn fill_region(&mut self, name: &str, to_region: &str, logging: bool) {
+        let region_idx = self.find_region_index(to_region).expect("Region not found");
+        let particle_idx = self.lattices[0].particle_names.len() as Particle;
+        self.lattices[0].particle_names.push(String::from(name));
+        let regions_idx_buffer = &self.regions.index_buffer.as_ref().unwrap()[&(region_idx as u32)];
+        self.lattices[0].fill_region_particles(particle_idx, regions_idx_buffer);
         // Update the diffusion matrix
         self.diffusion_matrix.copy_dimension(2);
 

@@ -49,7 +49,7 @@ impl Lattice {
         self.concentrations.create_buffer(device, usage, Some("Concentrations Buffer"));
     }
 
-    pub fn init_random_particles_region(&mut self, particle: Particle, num_particles: u32, regions: &Tensor3<Region>, region_idx: u32) {
+    pub fn init_random_particles_region_legacy(&mut self, particle: Particle, num_particles: u32, regions: &Tensor3<Region>, region_idx: u32) {
         self.concentrations.enlarge_dimension(3, 0);
         let mut rng = rand::thread_rng();
         for _ in 0..num_particles {
@@ -70,6 +70,49 @@ impl Lattice {
             }
             if i == 100 {
                 panic!("Could not add particle to region");
+            }
+        }
+    }
+
+    pub fn init_random_particles_region(&mut self, particle: Particle, num_particles: u32, regions_idx_buffer: &Vec<u32>) {
+        self.concentrations.enlarge_dimension(3, 0);
+        let mut rng = rand::thread_rng();
+        for _ in 0..num_particles {
+            let mut i = 0;
+            while i < 100 {
+                let position_idx = rng.gen_range(0..regions_idx_buffer.len());
+                // Transform the position idx to the 3D coordinates
+                let site = [
+                    position_idx % self.lattice_params.res[0] as usize,
+                    (position_idx / self.lattice_params.res[0] as usize) % self.lattice_params.res[1] as usize,
+                    (position_idx / (self.lattice_params.res[0] as usize * self.lattice_params.res[1] as usize)) % self.lattice_params.res[2] as usize,
+                ];
+                match self.add_particle_site(site, particle) {
+                    Ok(_) => break,
+                    Err(_) => {
+                        i += 1;
+                        continue;
+                    },
+                }
+            }
+            if i == 100 {
+                panic!("Could not add particle to region");
+            }
+        }
+    }
+
+    pub fn fill_region_particles(&mut self, particle: Particle, regions_idx_buffer: &Vec<u32>) {
+        self.concentrations.enlarge_dimension(3, 0);
+        for position_idx in 0..regions_idx_buffer.len() {
+            // Transform the position idx to the 3D coordinates
+            let site = [
+                position_idx % self.lattice_params.res[0] as usize,
+                (position_idx / self.lattice_params.res[0] as usize) % self.lattice_params.res[1] as usize,
+                (position_idx / (self.lattice_params.res[0] as usize * self.lattice_params.res[1] as usize)) % self.lattice_params.res[2] as usize,
+            ];
+            match self.add_particle_site(site, particle) {
+                Ok(_) => continue,
+                Err(_) => panic!("Could not add particle to region"),
             }
         }
     }
