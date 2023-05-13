@@ -135,6 +135,7 @@ impl Regions {
                 }
             }
         }
+        self.index_buffer = Some(index_buffer);
     }
 }
 

@@ -78,24 +78,24 @@ impl Lattice {
         self.concentrations.enlarge_dimension(3, 0);
         let mut rng = rand::thread_rng();
         for _ in 0..num_particles {
-            let mut i = 0;
-            while i < 100 {
+            let mut i_ret = 0;
+            while i_ret < 100 {
                 let position_idx = rng.gen_range(0..regions_idx_buffer.len());
+                let position = regions_idx_buffer[position_idx];
                 // Transform the position idx to the 3D coordinates
-                let site = [
-                    position_idx % self.lattice_params.res[0] as usize,
-                    (position_idx / self.lattice_params.res[0] as usize) % self.lattice_params.res[1] as usize,
-                    (position_idx / (self.lattice_params.res[0] as usize * self.lattice_params.res[1] as usize)) % self.lattice_params.res[2] as usize,
-                ];
+                let k = position % self.lattice_params.res[2];
+                let j = ((position - k) / self.lattice_params.res[2]) % self.lattice_params.res[1];
+                let i = ((position - k) / self.lattice_params.res[2] - j) / self.lattice_params.res[1];
+                let site = [i as usize, j as usize, k as usize];
                 match self.add_particle_site(site, particle) {
                     Ok(_) => break,
                     Err(_) => {
-                        i += 1;
+                        i_ret += 1;
                         continue;
                     },
                 }
             }
-            if i == 100 {
+            if i_ret == 100 {
                 panic!("Could not add particle to region");
             }
         }
@@ -104,12 +104,18 @@ impl Lattice {
     pub fn fill_region_particles(&mut self, particle: Particle, regions_idx_buffer: &Vec<u32>) {
         self.concentrations.enlarge_dimension(3, 0);
         for position_idx in 0..regions_idx_buffer.len() {
+            let position = regions_idx_buffer[position_idx];
             // Transform the position idx to the 3D coordinates
-            let site = [
-                position_idx % self.lattice_params.res[0] as usize,
-                (position_idx / self.lattice_params.res[0] as usize) % self.lattice_params.res[1] as usize,
-                (position_idx / (self.lattice_params.res[0] as usize * self.lattice_params.res[1] as usize)) % self.lattice_params.res[2] as usize,
-            ];
+            // let value_1d = k + j * shape[2] + i * shape[1] * shape[2];
+
+            // k = value % shape[2]
+            // j = ((value - k) / shape[2]) % shape[1]
+            // i = ((value - k) / shape[2] - j) / shape[1]
+            let k = position % self.lattice_params.res[2];
+            let j = ((position - k) / self.lattice_params.res[2]) % self.lattice_params.res[1];
+            let i = ((position - k) / self.lattice_params.res[2] - j) / self.lattice_params.res[1];
+
+            let site = [i as usize, j as usize, k as usize];
             match self.add_particle_site(site, particle) {
                 Ok(_) => continue,
                 Err(_) => panic!("Could not add particle to region"),

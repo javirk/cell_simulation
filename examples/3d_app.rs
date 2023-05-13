@@ -126,16 +126,16 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     //     shell_name: "one".to_string(), interior_name: "two".to_string(), p0: [0.5, 0., 0.1], pf: [0.5, 0.5, 0.4], internal_radius: 0.125, external_radius: 0.25 
     // }, 8.15E-14/6.);
     // simulation.add_region(RegionType::SemiSphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5, direction: [0., 0., 1.] }, 8.15E-14/6.);
-    simulation.add_region(RegionType::Capsid { shell_name: "one".to_string(), interior_name: "two".to_string(), center: [0.4, 0.4, 1.], dir: [0., 0., 1.], internal_radius: 0.37, external_radius: 0.4, total_length: 2. }, 0.);
+    simulation.add_region(RegionType::Capsid { shell_name: "one".to_string(), interior_name: "two".to_string(), center: [0.4, 0.4, 1.], dir: [0., 0., 1.], internal_radius: 0.37, external_radius: 0.4, total_length: 2. }, 8.15E-14/6.);
     let base_region = RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.25], radius: 0.1 };
-    simulation.add_sparse_region("sparse", base_region, "two", 100, 8.15E-14/6.);
+    simulation.add_sparse_region("sparse", base_region, "two", 10000, 0.);
 
     simulation.prepare_regions();
 
-    // simulation.add_particle("A", "two", 1000, true);
-    // simulation.add_particle("B", "two", 1000, false);
-    // simulation.add_particle("C", "two", 0, false);
-    // simulation.add_particle("D", "one", 5000, false);
+    simulation.add_particle("A", "two", 1000, true);
+    simulation.add_particle("B", "two", 1000, false);
+    simulation.add_particle("C", "two", 0, false);
+    simulation.add_particle("D", "one", 5000, false);
     simulation.fill_region("E", "sparse", false);
 
     // simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);

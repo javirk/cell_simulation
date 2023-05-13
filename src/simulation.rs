@@ -328,6 +328,7 @@ impl Simulation {
     pub fn add_sparse_region(&mut self, name: &str, base_region: RegionType, to_region: &str, max_volume: u32, diffusion_rate: f32) {
         let to_region_idx = self.find_region_index(to_region).unwrap();
         assert!(self.regions.volumes[to_region_idx] > max_volume);
+        println!("Volume of {} is {}", to_region, self.regions.volumes[to_region_idx]);
 
         let transition_rate: f32 = 0.; //8.15E-14 / 6.;
         let voxel_size = self.lattice_params.get_voxel_size();
@@ -339,6 +340,7 @@ impl Simulation {
             },
             _ => panic!("Only spheres can be added as sparse regions")
         };
+        let radius_squared = radius * radius;
         let radius_voxels = voxel_size.iter().map(|&x| (radius / x) as usize).collect::<Vec<usize>>();
 
         let new_region_idx = self.regions.types.len() as Region;
@@ -361,6 +363,10 @@ impl Simulation {
             }
 
             // Make sure it fits
+            if point[0] < radius_voxels[0] || point[1] < radius_voxels[1] || point[2] < radius_voxels[2] {
+                    retries += 1;
+                    continue;
+            }
             let data = self.regions.regions.data.slice(
                 s![point[0] - radius_voxels[0]..point[0] + radius_voxels[0], 
                 point[1] - radius_voxels[1]..point[1] + radius_voxels[1], 
@@ -380,7 +386,7 @@ impl Simulation {
                         let dist: f32 = (i.abs_diff(point[0]) as f32).pow(2.) * voxel_size_squared[0] + 
                                         (j.abs_diff(point[1]) as f32).pow(2.) * voxel_size_squared[1] +
                                         (k.abs_diff(point[2]) as f32).pow(2.) * voxel_size_squared[2];
-                        if dist < (radius * radius) {
+                        if dist < radius_squared {
                             self.regions.set_value_position(new_region_idx, [i, j, k]);
                             curr_volume += 1;
                         }
