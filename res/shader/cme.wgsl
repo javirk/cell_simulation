@@ -10,7 +10,7 @@ struct Lattice {
 @group(0) @binding(2) var<uniform> unif: Uniforms;
 
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
-@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
+@group(1) @binding(4) var<storage> reservoirs: array<u32>;
 
 @group(2) @binding(0) var <storage, read_write> concentrations: array<i32>;
 @group(2) @binding(1) var <storage, read> stoichiometry: array<i32>;
@@ -69,9 +69,13 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var j_lattice = 0u;
         let idx_reaction = i32(i * (reaction_params.num_species + 1u));
         for (var idx_species = 1; idx_species <= i32(reaction_params.num_species); idx_species += 1) {
+            if reservoirs[idx_lattice] != idx_species {
+                // We don't update the concentrations because it's part of a reservoir
+                continue;
+            }
             concentrations[idx_concentration + idx_species] += stoichiometry[idx_reaction + idx_species];
             atomicAdd(&concentrations_stat[idx_species], stoichiometry[idx_reaction + idx_species]);
-
+            
             // Now update the lattice:
             // Look at the concentration of the species in the site and write 
             var cc: i32 = concentrations[idx_concentration + idx_species];

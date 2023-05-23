@@ -5,10 +5,8 @@ use winit::{
 
 pub struct Setup {
     pub window: Option<winit::window::Window>,
-    instance: wgpu::Instance,
     size: Option<winit::dpi::PhysicalSize<u32>>,
     pub surface: Option<wgpu::Surface>,
-    adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: Option<wgpu::SurfaceConfiguration>,
@@ -18,7 +16,7 @@ impl Setup {
     // Think whether this should be here in the examples or inside the library
     pub async fn new(window: Window) -> Self {
         let mut builder = winit::window::WindowBuilder::new();
-        builder = builder.with_title("Example");
+        builder = builder.with_title("3D Cell Model");
     
         log::info!("Initializing the surface...");
     
@@ -80,10 +78,8 @@ impl Setup {
         
         Setup {
             window: Some(window),
-            instance,
             size: Some(size),
             surface: Some(surface),
-            adapter,
             device,
             queue,
             config: Some(config),
@@ -136,10 +132,8 @@ impl Setup {
         
         Setup {
             window: None,
-            instance,
             size: None,
             surface: None,
-            adapter,
             device,
             queue,
             config: None

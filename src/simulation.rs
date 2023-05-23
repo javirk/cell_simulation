@@ -39,7 +39,6 @@ pub struct Simulation {
 
 
 
-
 impl Simulation {
     pub fn new(
         lattice_params: LatticeParams,
@@ -635,17 +634,16 @@ impl Simulation {
 
     }
 
-    pub fn add_particle(&mut self, name: &str, to_region: &str, count: u32, logging: bool) {
+    pub fn add_particle_count(&mut self, name: &str, to_region: &str, count: u32, logging: bool, is_reservoir: bool) {
         // Add particles to the simulation. It will be added to the region specified by to_region
         let region_idx = self.find_region_index(to_region).expect("Region not found");
-
         let particle_idx = self.lattices[0].particle_names.len() as Particle;
 
         self.lattices[0].particle_names.push(String::from(name));
 
         let regions_idx_buffer = &self.regions.index_buffer.as_ref().unwrap()[&(region_idx as u32)];
 
-        self.lattices[0].init_random_particles_region(particle_idx, count, regions_idx_buffer);
+        self.lattices[0].init_random_particles_region(particle_idx, count, regions_idx_buffer, is_reservoir);
 
         // Update the diffusion matrix
         self.diffusion_matrix.copy_dimension(2);
@@ -656,6 +654,14 @@ impl Simulation {
         if logging {
             self.lattices[0].logging_particles.push(particle_idx);
         }
+    }
+
+    pub fn add_particle_concentration(&mut self, name: &str, to_region: &str, concentration: f32, logging: bool, is_reservoir: bool) {
+        // Take the volume of the region and calculate the number of particles. Then call add_particle_count
+        let region_idx = self.find_region_index(to_region).expect("Region not found");
+        let volume = self.regions.volumes[region_idx] as f32;
+        let count = (concentration * volume) as u32;
+        self.add_particle_count(name, to_region, count, logging, is_reservoir);
     }
 
     pub fn fill_region(&mut self, name: &str, to_region: &str, logging: bool) {
@@ -807,7 +813,7 @@ impl Simulation {
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.diffusion_matrix.buf_size as _)
+                            min_binding_size: wgpu::BufferSize::new(self.diffusion_matrix.buffer_size() as _)
                         },
                         count: None,
                     },
@@ -861,8 +867,19 @@ impl Simulation {
                         },
                         count: None,
                     },
+                    // Reservoirs
                     wgpu::BindGroupLayoutEntry {
                         binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].reservoir.buffer_size() as _),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: texture.binding_type(wgpu::StorageTextureAccess::ReadWrite),
                         count: None,

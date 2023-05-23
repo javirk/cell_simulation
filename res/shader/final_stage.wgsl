@@ -7,7 +7,8 @@
 @group(0) @binding(3) var<storage> regions: array<u32>;
 @group(1) @binding(1) var<storage, read_write> latticeDest: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<u32>;
-@group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
+@group(1) @binding(4) var<storage> reservoirs: array<u32>;
+@group(1) @binding(5) var texture: texture_storage_3d<r32float, read_write>;
 
 
 @compute @workgroup_size(1, 1, 1)
@@ -58,6 +59,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         case 1u: {
             // Render regions
             textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(regions[idx_occupancy]) / 255., 0.0, 0.0, 0.0));
+        }
+        case 2u: {
+            // Render reservoirs
+            textureStore(texture, vec3<i32>(i32(X), i32(Y), i32(Z)), vec4<f32>(f32(reservoirs[idx_occupancy]) / 255., 0.0, 0.0, 0.0));
         }
     }
 }

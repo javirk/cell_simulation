@@ -119,9 +119,9 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 
     simulation.add_region(RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5 }, 8.15E-14/6.);
 
-    simulation.add_particle("A", "one", 1000, true);
-    simulation.add_particle("B", "one", 1000, false);
-    simulation.add_particle("C", "one", 0, false);
+    simulation.add_particle_count("A", "one", 1000, true, false);
+    simulation.add_particle_count("B", "one", 1000, false, false);
+    simulation.add_particle_count("C", "one", 0, false, false);
 
     //simulation.add_reaction(vec!["p1"], vec!["p2"], 0.);
     simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
