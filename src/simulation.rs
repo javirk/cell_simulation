@@ -867,19 +867,8 @@ impl Simulation {
                         },
                         count: None,
                     },
-                    // Reservoirs
                     wgpu::BindGroupLayoutEntry {
                         binding: 4,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer { 
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].reservoir.buffer_size() as _),
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 5,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: texture.binding_type(wgpu::StorageTextureAccess::ReadWrite),
                         count: None,
@@ -929,6 +918,17 @@ impl Simulation {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: wgpu::BufferSize::new(self.reaction_rates.buffer_size() as _)
+                        },
+                        count: None,
+                    },
+                    // Reservoirs
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].reservoir.buffer_size() as _),
                         },
                         count: None,
                     },
@@ -1028,6 +1028,10 @@ impl Simulation {
                     wgpu::BindGroupEntry {
                         binding: 3,
                         resource: self.reaction_rates.binding_resource(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.lattices[0].reservoir.binding_resource(),
                     },
                 ],
                 label: Some("Reactions bind group"),

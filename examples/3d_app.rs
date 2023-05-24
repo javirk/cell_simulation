@@ -134,12 +134,12 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 
     simulation.prepare_regions();
 
-    simulation.add_particle_count("A", "interior", 1000, true, false);
-    simulation.add_particle_count("B", "interior", 1000, false, false);
-    simulation.add_particle_count("C", "interior", 0, false, false);
-    simulation.add_particle_count("D", "membrane", 5000, false, false);
-    simulation.fill_region("E", "sparse", false);
-    simulation.add_particle_concentration("Iex", "membrane", 0.80, false, true);
+    // simulation.add_particle_count("A", "interior", 1000, true, false);
+    // simulation.add_particle_count("B", "interior", 1000, false, false);
+    // simulation.add_particle_count("C", "interior", 0, false, false);
+    // simulation.add_particle_count("D", "membrane", 5000, false, false);
+    // simulation.fill_region("E", "sparse", false);
+    // simulation.add_particle_concentration("Iex", "membrane", 0.80, false, true);
 
     // simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
     // simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
@@ -387,6 +387,9 @@ pub async fn run() {
     });
 }
 
+use std::env;
+
 fn main() {
+    env::set_var("RUST_BACKTRACE", "1");
     pollster::block_on(run());
 }

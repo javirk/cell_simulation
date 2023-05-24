@@ -10,12 +10,12 @@ struct Lattice {
 @group(0) @binding(2) var<uniform> unif: Uniforms;
 
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
-@group(1) @binding(4) var<storage> reservoirs: array<u32>;
 
 @group(2) @binding(0) var <storage, read_write> concentrations: array<i32>;
 @group(2) @binding(1) var <storage, read> stoichiometry: array<i32>;
 @group(2) @binding(2) var <storage, read> reactions_idx: array<i32>;
 @group(2) @binding(3) var <storage, read> reaction_rates: array<f32>;
+@group(2) @binding(4) var<storage> reservoirs: array<u32>;
 
 // Statistics bindings. It would be ideal to have them together in the same binding. Is that possible?
 @group(3) @binding(0) var <storage, read_write> concentrations_stat: array<atomic<i32>>;
