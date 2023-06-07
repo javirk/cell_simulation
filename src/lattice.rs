@@ -68,7 +68,7 @@ impl Lattice {
                 let site = [i as usize, j as usize, k as usize];
                 // There must be a better way to do this
                 if is_reservoir {
-                    match self.add_particle_site(site, particle) {
+                    match self.add_reservoir_site(site, particle) {
                         Ok(_) => break,
                         Err(_) => {
                             i_ret += 1;
@@ -76,7 +76,7 @@ impl Lattice {
                         },
                     }
                 } else {
-                    match self.add_reservoir_site(site, particle) {
+                    match self.add_particle_site(site, particle) {
                         Ok(_) => break,
                         Err(_) => {
                             i_ret += 1;

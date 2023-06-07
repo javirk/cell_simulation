@@ -9,7 +9,7 @@
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<u32>;
 @group(1) @binding(4) var texture: texture_storage_3d<r32float, read_write>;
 
-@group(2) @binding(4) var<storage> reservoirs: array<u32>;
+@group(2) @binding(0) var<storage> reservoirs: array<u32>;
 
 
 @compute @workgroup_size(1, 1, 1)

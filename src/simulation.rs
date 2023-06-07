@@ -114,6 +114,7 @@ impl Simulation {
                 &self.bind_groups[1 + (frame_num as usize % 2)],
                 &self.bind_groups[3],
                 &self.statistics_groups.as_ref().expect("").bind_group,
+                &self.bind_groups[4],
                 command_encoder,
                 &self.lattice_params.raw
             );
@@ -313,8 +314,8 @@ impl Simulation {
                 self.add_region_semisphere("cap2", pf, external_radius, dir, diffusion_rate, transition_rate);
                 self.add_region_semisphere("inside1", p0, internal_radius, neg_dir, diffusion_rate, transition_rate);
                 self.add_region_semisphere("inside2", pf, internal_radius, dir, diffusion_rate, transition_rate);
-                // TODO: Join cap1 and cap2 to shell name
-                // TODO: Join inside1 and inside2 to interior name
+                // Join cap1 and cap2 to shell name
+                // Join inside1 and inside2 to interior name
                 self.join_regions("cap1", &shell_name);
                 self.join_regions("cap2", &shell_name);
                 self.join_regions("inside1", &interior_name);
@@ -386,6 +387,7 @@ impl Simulation {
                                         (j.abs_diff(point[1]) as f32).pow(2.) * voxel_size_squared[1] +
                                         (k.abs_diff(point[2]) as f32).pow(2.) * voxel_size_squared[2];
                         if dist < radius_squared {
+                            self.regions.check_regions_collision([i, j, k]);
                             self.regions.set_value_position(new_region_idx, [i, j, k]);
                             curr_volume += 1;
                         }
@@ -461,7 +463,9 @@ impl Simulation {
                                        cp[2] * cp[2] * voxel_size_squared[2];
 
                     if cp_norm <= r_const {
-                        self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
+                        let pos = [x as usize, y as usize, z as usize];
+                        self.regions.check_regions_collision(pos);
+                        self.regions.set_value_position(new_region_idx, pos);
                         volume += 1;
                     }
                     z += 1.;
@@ -500,6 +504,8 @@ impl Simulation {
         for x in start.0..end.0 {
             for y in start.1..end.1 {
                 for z in start.2..end.2 {
+                    let pos = [x as usize, y as usize, z as usize];
+                    self.regions.check_regions_collision(pos);
                     self.regions.set_value_position(new_region_idx, [x, y, z]);
                 }
             }
@@ -532,6 +538,8 @@ impl Simulation {
                                     (y - center.1).pow(2) * voxel_size_squared[1] +
                                     (z - center.2).pow(2) * voxel_size_squared[2];
                     if dist < radius_squared {
+                        let pos = [x as usize, y as usize, z as usize];
+                        self.regions.check_regions_collision(pos);
                         self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
                         volume += 1;
                     }
@@ -574,7 +582,9 @@ impl Simulation {
                                     (y - center.1).pow(2) * voxel_size_squared[1] +
                                     (z - center.2).pow(2) * voxel_size_squared[2];
                     if dist < radius_squared {
-                        self.regions.set_value_position(new_region_idx, [x as usize, y as usize, z as usize]);
+                        let pos = [x as usize, y as usize, z as usize];
+                        self.regions.check_regions_collision(pos);
+                        self.regions.set_value_position(new_region_idx, pos);
                         volume += 1;
                     }
                     z += 1.;
@@ -630,8 +640,10 @@ impl Simulation {
         self.diffusion_matrix.remove_element_at(1, region_delete_idx as usize);
         self.lattice_params.remove_region();
 
-        self.regions.remove_region(region_delete_idx as usize);
+        // Update the volume
+        self.regions.volumes[to_region_idx as usize] += self.regions.volumes[region_delete_idx as usize];
 
+        self.regions.remove_region(region_delete_idx as usize);
     }
 
     pub fn add_particle_count(&mut self, name: &str, to_region: &str, count: u32, logging: bool, is_reservoir: bool) {
@@ -661,6 +673,7 @@ impl Simulation {
         let region_idx = self.find_region_index(to_region).expect("Region not found");
         let volume = self.regions.volumes[region_idx] as f32;
         let count = (concentration * volume) as u32;
+        println!("Adding {} particles to region {}", count, to_region);
         self.add_particle_count(name, to_region, count, logging, is_reservoir);
     }
 
@@ -822,6 +835,25 @@ impl Simulation {
             }
         );
 
+        let boundaries_bind_group_layout = device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    // Reservoirs
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].reservoir.buffer_size() as _),
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("Boundaries bind group layout")
+            }
+        );
+
         // Lattice and RDME bind group layouts
         let lattice_bind_group_layout = device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
@@ -921,22 +953,11 @@ impl Simulation {
                         },
                         count: None,
                     },
-                    // Reservoirs
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 4,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer { 
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].reservoir.buffer_size() as _),
-                        },
-                        count: None,
-                    },
                 ],
                 label: None
             }
         );
-        vec![data_bind_group_layout, lattice_bind_group_layout, reactions_bind_group_layout]
+        vec![data_bind_group_layout, lattice_bind_group_layout, reactions_bind_group_layout, boundaries_bind_group_layout]
     }
 
     fn build_bind_groups(
@@ -949,6 +970,7 @@ impl Simulation {
         let data_bind_group_layout = &bind_group_layouts[0];
         let lattice_bind_group_layout = &bind_group_layouts[1];
         let reactions_bind_group_layout = &bind_group_layouts[2];
+        let boundaries_bind_group_layout = &bind_group_layouts[3];
 
         let mut bind_groups = Vec::<wgpu::BindGroup>::new();
         bind_groups.push(
@@ -1029,12 +1051,21 @@ impl Simulation {
                         binding: 3,
                         resource: self.reaction_rates.binding_resource(),
                     },
+                ],
+                label: Some("Reactions bind group"),
+            })
+        );
+
+        bind_groups.push(
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: boundaries_bind_group_layout,
+                entries: &[
                     wgpu::BindGroupEntry {
-                        binding: 4,
+                        binding: 0,
                         resource: self.lattices[0].reservoir.binding_resource(),
                     },
                 ],
-                label: Some("Reactions bind group"),
+                label: Some("Boundaries bind group"),
             })
         );
 
@@ -1045,6 +1076,7 @@ impl Simulation {
     fn build_texture_compute_pipeline(&self, bind_group_layouts: &Vec<wgpu::BindGroupLayout>, device: &wgpu::Device) -> wgpu::ComputePipeline {
         let data_bind_group_layout = &bind_group_layouts[0];
         let lattice_bind_group_layout = &bind_group_layouts[1];
+        let boundaries_bind_group_layout = &bind_group_layouts[3];
 
         let binding = ShaderBuilder::new("final_stage.wgsl").unwrap();
         let shader_builder = binding.build();
@@ -1053,7 +1085,7 @@ impl Simulation {
         let compute_pipeline_layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("Texture compute pipeline layout"),
-                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout],
+                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout, boundaries_bind_group_layout],
                 push_constant_ranges: &[],
             }
         );
@@ -1084,6 +1116,7 @@ impl Simulation {
             cpass.set_pipeline(&self.texture_compute_pipeline.as_ref().expect(""));
             cpass.set_bind_group(0, &self.bind_groups[0], &[]);
             cpass.set_bind_group(1, &self.bind_groups[1 + (frame_num as usize % 2)], &[]);
+            cpass.set_bind_group(2, &self.bind_groups[4], &[]);
             //cpass.set_bind_group(2, &self.statistics.as_ref().expect("").bind_group, &[]);
             cpass.insert_debug_marker("Dispatching texture pass");
             cpass.dispatch_workgroups(xgroups, ygroups, zgroups);

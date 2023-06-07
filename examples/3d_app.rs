@@ -130,7 +130,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
         shell_name: "membrane".to_string(), interior_name: "interior".to_string(), center: [0.4, 0.4, 1.], dir: [0., 0., 1.], internal_radius: 0.37, external_radius: 0.4, total_length: 2. 
     }, 8.15E-14/6.);
     let base_region = RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.25], radius: 0.1 };
-    simulation.add_sparse_region("sparse", base_region, "interior", 10000, 0.);
+    // simulation.add_sparse_region("sparse", base_region, "interior", 10000, 0.);
 
     simulation.prepare_regions();
 
@@ -139,7 +139,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     // simulation.add_particle_count("C", "interior", 0, false, false);
     // simulation.add_particle_count("D", "membrane", 5000, false, false);
     // simulation.fill_region("E", "sparse", false);
-    // simulation.add_particle_concentration("Iex", "membrane", 0.80, false, true);
+    simulation.add_particle_concentration("Iex", "membrane", 0.10, false, true);
 
     // simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
     // simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
@@ -390,6 +390,6 @@ pub async fn run() {
 use std::env;
 
 fn main() {
-    env::set_var("RUST_BACKTRACE", "1");
+    //env::set_var("RUST_BACKTRACE", "1");
     pollster::block_on(run());
 }

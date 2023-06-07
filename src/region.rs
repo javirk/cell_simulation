@@ -117,6 +117,14 @@ impl Regions {
         &self.types[idx]
     }
 
+    pub fn check_regions_collision(&mut self, position: [usize; 3]) {
+        // If the site already has a region, substract one to the volume of that region
+        let old_region = self.get_value_position(position);
+        if old_region != 0 {
+            self.volumes[old_region as usize] -= 1;
+        }
+    }
+
     pub fn prepare_regions(&mut self) {
         let shape = self.regions.shape();
         let mut index_buffer: HashMap<u32, Vec<u32>> = HashMap::new();

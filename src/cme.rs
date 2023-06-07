@@ -14,6 +14,7 @@ impl CME {
         let data_bind_group_layout = &bind_group_layouts[0];
         let lattice_bind_group_layout = &bind_group_layouts[1];
         let reaction_bind_group_layout = &bind_group_layouts[2];
+        let boundary_bind_group_layout = &bind_group_layouts[3];
 
         let binding = ShaderBuilder::new("cme.wgsl").unwrap();
         let shader_builder = binding.build();
@@ -22,7 +23,7 @@ impl CME {
         let compute_pipeline_layout = device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("CME compute"),
-                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout, reaction_bind_group_layout, &statistics.bind_group_layout],
+                bind_group_layouts: &[data_bind_group_layout, lattice_bind_group_layout, reaction_bind_group_layout, &statistics.bind_group_layout, &boundary_bind_group_layout],
                 push_constant_ranges: &[],
             }
         );
@@ -49,6 +50,7 @@ impl CME {
         lattice_bind_group: &wgpu::BindGroup,
         simulation_bind_group: &wgpu::BindGroup,
         statistics_bind_group: &wgpu::BindGroup,
+        boundaries_bind_group: &wgpu::BindGroup,
         command_encoder: &mut wgpu::CommandEncoder,
         params: &Params,
     ) {
@@ -71,6 +73,7 @@ impl CME {
             cpass.set_bind_group(1, lattice_bind_group, &[]);
             cpass.set_bind_group(2, simulation_bind_group, &[]);
             cpass.set_bind_group(3, statistics_bind_group, &[]);
+            cpass.set_bind_group(4, boundaries_bind_group, &[]);
             cpass.dispatch_workgroups(xgroups, ygroups, zgroups);
         }        
     }

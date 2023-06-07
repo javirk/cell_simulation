@@ -52,6 +52,10 @@ impl Setup {
     
         // Make sure we use the texture resolution limits from the adapter, so we can support images the size of the surface.
         let needed_limits = wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits());
+        let needed_limits = wgpu::Limits {
+            max_bind_groups: needed_limits.max_bind_groups + 1,
+            ..needed_limits
+        };
     
         let trace_dir = std::env::var("WGPU_TRACE");
         let (device, queue) = adapter

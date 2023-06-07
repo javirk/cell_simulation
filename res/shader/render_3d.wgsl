@@ -187,7 +187,7 @@ fn phongIllumination(k_a: vec3<f32>, k_d: vec3<f32>, k_s: vec3<f32>, alpha: f32,
 
 fn rayDirection(lookfrom: vec3<f32>, lookat: vec3<f32>, up: vec3<f32>, fov: f32, tex_pos: vec2<f32>) -> vec3<f32> {
     var tex_pos_norm = (tex_pos + 1.) / 2.;  // TODO: Please... this is so ugly. Change the other code to use normalized coordinates (-1, 1).
-    var aspect_ratio: f32 = params.height / params.width;
+    var aspect_ratio: f32 = f32(params.width / params.height);
     var theta: f32 = radians(fov);
     var half_width: f32 = tan(theta / 2.);
     var half_height: f32 = half_width * aspect_ratio;

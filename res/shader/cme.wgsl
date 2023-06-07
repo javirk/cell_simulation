@@ -15,7 +15,7 @@ struct Lattice {
 @group(2) @binding(1) var <storage, read> stoichiometry: array<i32>;
 @group(2) @binding(2) var <storage, read> reactions_idx: array<i32>;
 @group(2) @binding(3) var <storage, read> reaction_rates: array<f32>;
-@group(2) @binding(4) var<storage> reservoirs: array<u32>;
+@group(4) @binding(0) var<storage> reservoirs: array<u32>;
 
 // Statistics bindings. It would be ideal to have them together in the same binding. Is that possible?
 @group(3) @binding(0) var <storage, read_write> concentrations_stat: array<atomic<i32>>;
@@ -69,7 +69,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var j_lattice = 0u;
         let idx_reaction = i32(i * (reaction_params.num_species + 1u));
         for (var idx_species = 1; idx_species <= i32(reaction_params.num_species); idx_species += 1) {
-            if reservoirs[idx_lattice] != idx_species {
+            if reservoirs[idx_lattice] != u32(idx_species) {
                 // We don't update the concentrations because it's part of a reservoir
                 continue;
             }
