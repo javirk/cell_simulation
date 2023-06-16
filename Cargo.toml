@@ -19,6 +19,10 @@ path = "examples/no_window.rs"
 name = "3d"
 path = "examples/3d_app.rs"
 
+[[video_rendering]]
+name = "video_rendering"
+path = "examples/video_rendering.rs"
+
 [dependencies]
 cfg-if = "1"
 winit = "0.27.5"

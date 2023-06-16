@@ -5,7 +5,7 @@ use winit::{
 
 pub struct Setup {
     pub window: Option<winit::window::Window>,
-    size: Option<winit::dpi::PhysicalSize<u32>>,
+    pub size: Option<winit::dpi::PhysicalSize<u32>>,
     pub surface: Option<wgpu::Surface>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,

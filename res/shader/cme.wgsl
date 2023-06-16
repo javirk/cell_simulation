@@ -69,7 +69,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var j_lattice = 0u;
         let idx_reaction = i32(i * (reaction_params.num_species + 1u));
         for (var idx_species = 1; idx_species <= i32(reaction_params.num_species); idx_species += 1) {
-            if reservoirs[idx_lattice] != u32(idx_species) {
+            if reservoirs[idx_lattice] == u32(idx_species) {
                 // We don't update the concentrations because it's part of a reservoir
                 continue;
             }
