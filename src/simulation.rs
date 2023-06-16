@@ -426,7 +426,13 @@ impl Simulation {
         let new_region_idx = (self.regions.types.len() - 1) as Region;
         let res = self.lattice_params.get_res_f32();
         let voxel_size = self.lattice_params.get_voxel_size();
+        let radius_lattice = [
+            (radius / voxel_size[0]),
+            (radius / voxel_size[1]),
+            (radius / voxel_size[2])
+        ];
 
+        // Calculate center of the two planes
         let ip0 = [p0[0] / voxel_size[0], p0[1] / voxel_size[1], p0[2] / voxel_size[2]];
         let ipf = [pf[0] / voxel_size[0], pf[1] / voxel_size[1], pf[2] / voxel_size[2]];
         // println!("ip0: {:?}, ipf: {:?}", ip0, ipf);
@@ -437,10 +443,20 @@ impl Simulation {
 
         let voxel_size_squared = voxel_size.iter().map(|x| (*x).pow(2)).collect::<Vec<f32>>();
         let mut volume = 0u32;
-        let (mut x, mut y, mut z) = (0., 0., 0.);
-        while x < res[0] {
-            while y < res[1] {
-                while z < res[2] {
+
+        // We only need to check inside the box. Probably there's a better way with iters.
+        // No need to do fancy stuff because ip0_i < ipf_i for all i 
+        let mut x = (ip0[0] - radius_lattice[0]).max(0.);
+        let mut y = (ip0[1] - radius_lattice[1]).max(0.);
+        let mut z = (ip0[2] - radius_lattice[2]).max(0.);
+
+        let xf = (ipf[0] + radius_lattice[0]).min(res[0]);
+        let yf = (ipf[1] + radius_lattice[1]).min(res[1]);
+        let zf = (ipf[2] + radius_lattice[2]).min(res[2]);
+
+        while x < xf {
+            while y < yf {
+                while z < zf {
                     // Lies betwen the planes:
                     let w = [x - ipf[0], y - ipf[1], z - ipf[2]];
                     let proj = w[0] * v[0] + w[1] * v[1] + w[2] * v[2];
@@ -470,10 +486,10 @@ impl Simulation {
                     }
                     z += 1.;
                 }
-                z = 0.;
+                z = (ip0[2] - radius_lattice[2]).max(0.);
                 y += 1.;
             }
-            y = 0.;
+            y = (ip0[1] - radius_lattice[1]).max(0.);
             x += 1.;
         }
 
@@ -692,6 +708,28 @@ impl Simulation {
         if logging {
             self.lattices[0].logging_particles.push(particle_idx);
         }
+    }
+
+    pub fn particle_random_walk(&mut self, name: &str, to_region: &str, total_length: f32, block_length: f32, radius: f32, logging: bool) {
+        // Add this particle with a random walk within the region
+        let region_idx = self.find_region_index(to_region).expect("Region not found");
+        let particle_idx = self.lattices[0].particle_names.len() as Particle;
+
+        self.lattices[0].particle_names.push(String::from(name));
+
+        let regions_idx_buffer = &self.regions.index_buffer.as_ref().unwrap()[&(region_idx as u32)];
+        self.lattices[0].init_random_walk_particles(particle_idx, total_length, block_length, radius, regions_idx_buffer);
+
+        // Update the diffusion matrix
+        self.diffusion_matrix.copy_dimension(2);
+
+        // Add one column to stoichiometry matrix.
+        self.stoichiometry_matrix.enlarge_dimension(1, 0);
+        self.reaction_params.raw_params.num_species += 1;
+        if logging {
+            self.lattices[0].logging_particles.push(particle_idx);
+        }
+
     }
 
     #[allow(dead_code)]

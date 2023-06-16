@@ -20,6 +20,32 @@ pub struct Params {
     _padding2: u32,
 }
 
+impl Params {
+    pub fn get_voxel_size(&self) -> [f32; 3] {
+        [
+            self.dims[0] / self.res[0] as f32, 
+            self.dims[1] / self.res[1] as f32,
+            self.dims[2] / self.res[2] as f32
+        ]
+    }
+
+    pub fn get_res_usize(&self) -> [usize; 3] {
+        [
+            self.res[0] as usize,
+            self.res[1] as usize,
+            self.res[2] as usize
+        ]
+    }
+
+    pub fn get_res_f32(&self) -> [f32; 3] {
+        [
+            self.res[0] as f32,
+            self.res[1] as f32,
+            self.res[2] as f32
+        ]
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 pub struct LatticeParams {
@@ -92,27 +118,15 @@ impl LatticeParams {
     }
 
     pub fn get_res_usize(&self) -> [usize; 3] {
-        [
-            self.raw.res[0] as usize,
-            self.raw.res[1] as usize,
-            self.raw.res[2] as usize
-        ]
+        self.get_res_usize()
     }
 
     pub fn get_res_f32(&self) -> [f32; 3] {
-        [
-            self.raw.res[0] as f32,
-            self.raw.res[1] as f32,
-            self.raw.res[2] as f32
-        ]
+        self.raw.get_res_f32()
     }
 
     pub fn get_voxel_size(&self) -> [f32; 3] {
-        [
-            self.raw.dims[0] / self.raw.res[0] as f32, 
-            self.raw.dims[1] / self.raw.res[1] as f32,
-            self.raw.dims[2] / self.raw.res[2] as f32
-        ]
+        self.raw.get_voxel_size()
     }
 }
 

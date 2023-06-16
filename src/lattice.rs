@@ -6,7 +6,7 @@ use ndarray::prelude::*;
 use crate::MAX_PARTICLES_SITE;
 use crate::lattice_params::Params;
 use crate::types::Particle;
-
+use crate::utils::random_direction_sphere;
 
 pub struct Lattice {
     pub lattice: Tensor4<Particle>,
@@ -62,10 +62,7 @@ impl Lattice {
                 let position_idx = rng.gen_range(0..regions_idx_buffer.len());
                 let position = regions_idx_buffer[position_idx];
                 // Transform the position idx to the 3D coordinates
-                let k = position % self.lattice_params.res[2];
-                let j = ((position - k) / self.lattice_params.res[2]) % self.lattice_params.res[1];
-                let i = ((position - k) / self.lattice_params.res[2] - j) / self.lattice_params.res[1];
-                let site = [i as usize, j as usize, k as usize];
+                let site = self.position_to_3d_usize(position);
                 // There must be a better way to do this
                 if is_reservoir {
                     match self.add_reservoir_site(site, particle) {
@@ -98,16 +95,125 @@ impl Lattice {
             let position = regions_idx_buffer[position_idx];
 
             // Transform the position idx to the 3D coordinates
-            let k = position % self.lattice_params.res[2];
-            let j = ((position - k) / self.lattice_params.res[2]) % self.lattice_params.res[1];
-            let i = ((position - k) / self.lattice_params.res[2] - j) / self.lattice_params.res[1];
-
-            let site = [i as usize, j as usize, k as usize];
+            let site = self.position_to_3d_usize(position);
             match self.add_particle_site(site, particle) {
                 Ok(_) => continue,
                 Err(_) => panic!("Could not add particle to region"),
             }
         }
+    }
+
+    pub fn init_random_walk_particles(&mut self, particle: Particle, total_length: f32, block_length: f32, radius: f32, regions_idx_buffer: &Vec<u32>) {
+        // The particles are added as a cylinder, in blocks of length block_length. Each block has a random direction with at most 75 degrees to the previous
+        // If the outside of the region is reached, we step back a few steps (step_backwards) and try again
+
+        let step_backwards = 10;
+
+        // First block is random. Both position and direction, but the distance to the edge of the region in the direction must be greater than steps_backwards * block_length
+        let mut rng = rand::thread_rng();
+        let position_idx = rng.gen_range(0..regions_idx_buffer.len());
+        let position = regions_idx_buffer[position_idx];
+        let mut site = self.position_to_3d(position);
+
+        let mut direction = random_direction_sphere(&mut rng);
+
+        // TODO: Check distance to edge of region and recompute if necessary
+
+        // Add the first block
+        site = self.add_particles_cylinder(site, direction, block_length, radius, particle);
+
+        let mut length = block_length;
+        while length < total_length {
+            // Add the next block
+            direction = random_direction_sphere(&mut rng);
+            site = self.add_particles_cylinder(site, direction, block_length, radius, particle);
+            length += block_length;
+        }
+    }
+
+    fn add_particles_cylinder(&mut self, initial_site: [u32; 3], direction: [f32; 3], length: f32, radius: f32, particle: Particle) -> [u32; 3] {
+        // length and radius are in real units, so I have to convert them first. initial_site is in lattice units. 
+        // TODO: Put all this outside so it's not calculated many times
+        let voxel_size = self.lattice_params.get_voxel_size();
+        let res = self.lattice_params.get_res_f32();
+        let length_lattice = [
+            length / voxel_size[0],
+            length / voxel_size[1],
+            length / voxel_size[2]
+        ];
+        let radius_lattice = [
+            (radius / voxel_size[0]),
+            (radius / voxel_size[1]),
+            (radius / voxel_size[2])
+        ];
+
+        let ip0 = initial_site.iter().map(|x| *x as f32).collect::<Vec<f32>>();
+        let ipf = [
+            ip0[0] + direction[0] * length_lattice[0],
+            ip0[1] + direction[1] * length_lattice[1],
+            ip0[2] + direction[2] * length_lattice[2]
+        ];
+        let sign = direction.iter().map(|x| x.signum()).collect::<Vec<f32>>();
+        
+        let v = [ipf[0] - ip0[0], ipf[1] - ip0[1], ipf[2] - ip0[2]];
+        let v2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+        let r_const: f32 = radius * radius * v2;
+
+        let voxel_size_squared = voxel_size.iter().map(|x| (*x).powf(2.)).collect::<Vec<f32>>();
+
+        // We only need to check inside the box.
+        // In this case, we don't have ip0_i < ipf_i. So we need to find the corners of the box
+        let mut x = ((ip0[0] - radius_lattice[0]).min(ipf[0] + radius_lattice[0])).max(0.);
+        let mut y = ((ip0[1] - radius_lattice[1]).min(ipf[1] + radius_lattice[1])).max(0.);
+        let mut z = ((ip0[2] - radius_lattice[2]).min(ipf[2] + radius_lattice[2])).max(0.);
+
+        let xf = ((ipf[0] + radius_lattice[0]).max(ip0[0] - radius_lattice[0])).min(res[0]);
+        let yf = ((ipf[1] + radius_lattice[1]).max(ip0[1] - radius_lattice[1])).min(res[1]);
+        let zf = ((ipf[2] + radius_lattice[2]).max(ip0[2] - radius_lattice[2])).min(res[2]);
+        
+        // Now for sure x < xf, y < yf, z < zf
+        while x < xf {
+            while y < yf {
+                while z < zf {
+                    // Lies betwen the planes:
+                    let w = [x - ipf[0], y - ipf[1], z - ipf[2]];
+                    let proj = w[0] * v[0] + w[1] * v[1] + w[2] * v[2];
+                    if proj > 0. {
+                        z += 1.;
+                        continue;
+                    }
+
+                    let w = [x - ip0[0], y - ip0[1], z - ip0[2]];
+                    let proj = w[0] * v[0] + w[1] * v[1] + w[2] * v[2];
+                    if proj < 0. {
+                        z += 1.;
+                        continue;
+                    }
+
+                    // Lies inside the cylinder:
+                    let cp = [w[1] * v[2] - w[2] * v[1], w[2] * v[0] - w[0] * v[2], w[0] * v[1] - w[1] * v[0]];
+                    let cp_norm = cp[0] * cp[0] * voxel_size_squared[0] + 
+                                        cp[1] * cp[1] * voxel_size_squared[1] + 
+                                        cp[2] * cp[2] * voxel_size_squared[2];
+
+                    if cp_norm <= r_const {
+                        let site = [x as usize, y as usize, z as usize];
+                        match self.add_particle_site(site, particle) {
+                            Ok(_) => continue,
+                            Err(_) => panic!("Could not add particle to region"),
+                        }
+                    }
+                    z += 1.;
+                }
+                z = ((ip0[2] - radius_lattice[2]).min(ipf[2] + radius_lattice[2])).max(0.);
+                y += 1.;
+            }
+            y = ((ip0[1] - radius_lattice[1]).min(ipf[1] + radius_lattice[1])).max(0.);
+            x += 1.;
+        }
+
+        [ipf[0] as u32, ipf[1] as u32, ipf[2] as u32]
+
     }
 
     fn add_particle_site(&mut self, site: [usize; 3], particle: Particle) -> Result<String, String> {
@@ -140,6 +246,22 @@ impl Lattice {
             }
         }
         None
+    }
+
+    fn site_to_idx(&self, site: [u32; 3]) -> u32 {
+        site[0] * self.lattice_params.res[1] * self.lattice_params.res[2] + site[1] * self.lattice_params.res[2] + site[2]
+    }
+
+    fn position_to_3d(&self, position: u32) -> [u32; 3] {
+        let k = position % self.lattice_params.res[2];
+        let j = ((position - k) / self.lattice_params.res[2]) % self.lattice_params.res[1];
+        let i = ((position - k) / self.lattice_params.res[2] - j) / self.lattice_params.res[1];
+        [i, j, k]
+    }
+
+    fn position_to_3d_usize(&self, position: u32) -> [usize; 3] {
+        let pos_3d = self.position_to_3d(position);
+        pos_3d.iter().map(|&x| x as usize).collect::<Vec<usize>>().try_into().unwrap()
     }
 }
 

@@ -134,12 +134,14 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 
     simulation.prepare_regions();
 
-    // simulation.add_particle_count("A", "interior", 1000, true, false);
-    // simulation.add_particle_count("B", "interior", 1000, false, false);
+    // simulation.particle_random_walk("A", "interior", 0.2, 0.05, 0.002, false);
+
+    simulation.add_particle_count("A", "interior", 5000, true, false);
+    // simulation.add_particle_count("B", "interior", 5000, false, false);
     // simulation.add_particle_count("C", "interior", 0, false, false);
     // simulation.add_particle_count("D", "membrane", 5000, false, false);
     // simulation.fill_region("E", "sparse", false);
-    simulation.add_particle_concentration("Iex", "membrane", 0.10, false, true);
+    //simulation.add_particle_concentration("Iex", "membrane", 0.10, false, true);
 
     // simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
     // simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
@@ -170,9 +172,9 @@ fn step_system(
     let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
     simulation.simulation.step(frame_num, &mut command_encoder, device);
-    
-    _ = simulation.renderer.render(&mut command_encoder, &view);
 
+    _ = simulation.renderer.render(&mut command_encoder, &view);
+    
     simulation.uniform_buffer.data.frame_num += 1;
     simulation.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u32;
     simulation.uniform_buffer.data.slice = mouse_slice as u32;

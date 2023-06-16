@@ -54,7 +54,7 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var state: u32 = PCG(unif.itime + global_id.x * global_id.y + global_id.z);
     var rand_number: f32 = UniformFloat(state);
 
-    if (rand_number <= 1. - exp(- total_propensity * params.tau)) {
+    if (rand_number <= 1. - exp(-total_propensity * params.tau)) {
         // One reaction can happen in this time
         rand_number = UniformFloat(state + 1u);
 
@@ -69,8 +69,8 @@ fn cme(@builtin(global_invocation_id) global_id: vec3<u32>) {
         var j_lattice = 0u;
         let idx_reaction = i32(i * (reaction_params.num_species + 1u));
         for (var idx_species = 1; idx_species <= i32(reaction_params.num_species); idx_species += 1) {
-            if reservoirs[idx_lattice] != u32(idx_species) {
-                // We don't update the concentrations because it's part of a reservoir
+            if reservoirs[idx_lattice] == u32(idx_species) {
+                // We don't update the concentrations because the particle is part of a reservoir
                 continue;
             }
             concentrations[idx_concentration + idx_species] += stoichiometry[idx_reaction + idx_species];
