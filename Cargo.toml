@@ -23,7 +23,6 @@ path = "examples/3d_app.rs"
 cfg-if = "1"
 winit = "0.27.5"
 env_logger = "0.9"
-log = "0.4"
 pollster = "0.2.5"
 wgpu = "0.14.2"
 bytemuck = { version = "1.4", features = ["derive"]}
@@ -37,6 +36,7 @@ tensor-wgpu =  { git = "https://github.com/javirk/tensor-wgpu", rev = "aced60555
 ndarray = "0.15.6"
 futures = "0.3.26"
 futures-intrusive = "0.4"
+log = "0.4.20"
 
 [dev-dependencies]
 csv = "1.2.0"
@@ -49,3 +49,6 @@ naga = { git = "https://github.com/gfx-rs/naga.git", rev = "e98bd9264c3a6b04dff1
 
 [workspace]
 resolver = "2"
+
+[features]
+debug-print = []

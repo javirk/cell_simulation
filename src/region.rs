@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use tensor_wgpu::Tensor3;
 use rand::Rng;
+use ndarray::{prelude::*, StrideShape};
 
-use crate::types::Region;
+use crate::{types::Region, debug_println};
 
 #[derive(Debug)]
 pub enum RegionType {
@@ -145,6 +146,54 @@ impl Regions {
         }
         self.index_buffer = Some(index_buffer);
     }
+
+    pub fn generate_boundary_aware(&self, region_idx: usize, voxel_size: [f32; 3], radius_voxels: &Vec<usize>) -> [usize; 3] {
+        // Generate a point inside the region. It is the center of a sphere. With this function, we make sure that the whole sphere fits inside the region.
+        // Steps:
+        // 1. Generate a random point inside the region.
+        // 2. Check if the point or the surroundings belong to the region. If not, return to 1.
+        // 3. Make sure that the whole base_region fits inside the to_region. If not, return to 1.
+        let mut retries = 0u32;
+        let mut point: [usize; 3] = [0, 0, 0];
+        let mut found = false;
+        while retries < 10 && !found {
+            point = self.types[region_idx].generate_lattice(voxel_size);
+            debug_println!("generate_boundary_aware: Point: {:?}, radius: {:?}\n", point, radius_voxels);
+            if self.get_value_position(point) as usize != region_idx {
+                retries += 1;
+                continue;
+            }
+    
+            // Make sure it fits
+            // First side
+            if point[0] < radius_voxels[0] || point[1] < radius_voxels[1] || point[2] < radius_voxels[2] {
+                retries += 1;
+                continue;
+            }
+            // Second side
+            if point[0] + radius_voxels[0] >= self.regions.shape()[0] || point[1] + radius_voxels[1] >= self.regions.shape()[1] || point[2] + radius_voxels[2] >= self.regions.shape()[2] {
+                retries += 1;
+                continue;
+            }
+            let data = self.regions.data.slice(
+                s![point[0] - radius_voxels[0]..point[0] + radius_voxels[0], 
+                point[1] - radius_voxels[1]..point[1] + radius_voxels[1], 
+                point[2] - radius_voxels[2]..point[2] + radius_voxels[2]]
+            );  // This is a very ugly and hacky way of slicing the tensor, but it's probably the fastest
+    
+            if data.sum() != (region_idx * data.len()) as u32 {
+                // The whole base region doesn't fit inside the to_region
+                retries += 1;
+                continue;
+            }
+            found = true;
+        }
+        if !found {
+            panic!("Couldn't find a suitable point for the region");
+        }
+        point
+    }
+
 }
 
 pub trait Random {
@@ -184,7 +233,7 @@ impl Random for RegionType {
                 [x, y, z]
             },
             Cylinder { name: _, p0, pf, radius } => {
-                println!("Cylinder: {:?}", self);
+                //println!("Cylinder: {:?}", self);
                 let mut rng = rand::thread_rng();
                 let theta = rng.gen_range(0.0..2.0 * std::f32::consts::PI);
                 let r = rng.gen_range(0.0..*radius);
@@ -199,7 +248,6 @@ impl Random for RegionType {
 
     fn generate_lattice(&self, voxel_size: [f32; 3]) -> [usize; 3] {
         let point = self.generate();
-        println!("Point before: {:?}", point);
         [(point[0] / voxel_size[0]) as usize, (point[1] / voxel_size[1]) as usize, (point[2] / voxel_size[2]) as usize]
     }
 }

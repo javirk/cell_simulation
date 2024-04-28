@@ -1,4 +1,4 @@
-use crate::{lattice_params::Params,preprocessor::ShaderBuilder, WORKGROUP_SIZE, statistics::StatisticsGroup};
+use crate::{lattice_params::Params,preprocessor::ShaderBuilder, CME_WORKGROUP_SIZE, statistics::StatisticsGroup};
 
 
 pub struct CME {
@@ -58,12 +58,12 @@ impl CME {
         // Compute pass
         // Set pipeline, bind group
         // Dispatch
-        let xdim = params.res[0] as u32 + WORKGROUP_SIZE.0 - 1;
-        let xgroups = xdim / WORKGROUP_SIZE.0;
-        let ydim = params.res[1] as u32 + WORKGROUP_SIZE.1 - 1;
-        let ygroups = ydim / WORKGROUP_SIZE.1;
-        let zdim = params.res[2] as u32 + WORKGROUP_SIZE.2 - 1;
-        let zgroups = zdim / WORKGROUP_SIZE.2;
+        let xdim = params.res[0] as u32 + CME_WORKGROUP_SIZE.0 - 1;
+        let xgroups = xdim / CME_WORKGROUP_SIZE.0;
+        let ydim = params.res[1] as u32 + CME_WORKGROUP_SIZE.1 - 1;
+        let ygroups = ydim / CME_WORKGROUP_SIZE.1;
+        let zdim = params.res[2] as u32 + CME_WORKGROUP_SIZE.2 - 1;
+        let zgroups = zdim / CME_WORKGROUP_SIZE.2;
         
         // Main compute pass
         {

@@ -16,8 +16,10 @@ struct Lattice {
 @group(1) @binding(1) var<storage, read_write> latticeDest: Lattice;
 @group(1) @binding(2) var<storage> occupancySrc: array<u32>;
 @group(1) @binding(3) var<storage, read_write> occupancyDest: array<atomic<u32>>;
+@group(1) @binding(5) var<storage, read_write> lock: array<atomic<u32>>;  // TODO: Check if this could be bool or something
 
 @group(2) @binding(0) var <storage, read_write> concentrations: array<atomic<i32>>;
+@group(3) @binding(0) var <storage, read_write> concentrations_stat: array<atomic<i32>>;
 
 
 fn writeLatticeSite(idx_lattice: i32, value: u32) -> bool {
@@ -26,13 +28,13 @@ fn writeLatticeSite(idx_lattice: i32, value: u32) -> bool {
     var success = false;
 
     loop {
-        var resValue = atomicCompareExchangeWeak(&(latticeDest.lattice[idx_lattice + i]), 0u, value);
-        success = resValue.exchanged;
+        success = atomicCompareExchangeWeak(&(latticeDest.lattice[idx_lattice + i]), 0u, value).exchanged;
+        // success = resValue.exchanged;
         if (success) {
             return true;
         }
         if (i >= max_particles) {
-            break;
+            return false;
         }
         i += 1;
     }
@@ -49,24 +51,40 @@ fn move_particle_site(particle: u32, volume_src: vec3<u32>, volume_dest: vec3<u3
     let idx_lattice_dest: i32 = get_index_lattice(volume_dest, params);
     let idx_concentration_src: i32 = idx_occupancy_src * i32(reaction_params.num_species + 1u) + i32(particle);
     let idx_concentration_dest: i32 = idx_occupancy_dest * i32(reaction_params.num_species + 1u) + i32(particle);
-   
-    // First, move particle away. If it doesn't fit, move it back
-    let num_particles_dest = atomicAdd(&occupancyDest[idx_occupancy_dest], 1u);
-    if num_particles_dest <= params.max_particles_site {
-        if (writeLatticeSite(idx_lattice_dest, particle)) {
-            // It could be moved
-            atomicSub(&occupancyDest[idx_occupancy_src], 1u);
-            atomicStore(&latticeDest.lattice[idx_particle], 0u);
-            atomicAdd(&concentrations[idx_concentration_dest], 1);
-            atomicSub(&concentrations[idx_concentration_src], 1);
-        } else {
-            // It couldn't be moved
-            atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
+
+    var exchanged: bool = false;
+
+    // We can only move when both destination is unlocked. Loop over it until it's possible
+    loop { // Destination lock
+        if (atomicCompareExchangeWeak(&lock[idx_occupancy_dest], 0u, 1u).exchanged) {
+            // First, move particle away. If it doesn't fit, move it back
+            let num_particles_dest = atomicAdd(&occupancyDest[idx_occupancy_dest], 1u);
+            if num_particles_dest <= params.max_particles_site {
+                if (writeLatticeSite(idx_lattice_dest, particle)) {
+                    // It could be moved
+                    // Update concentration of the destination
+                    atomicAdd(&concentrations[idx_concentration_dest], 1);
+
+                    // Update parameters for the source.
+                    atomicSub(&occupancyDest[idx_occupancy_src], 1u);
+                    atomicStore(&latticeDest.lattice[idx_particle], 0u);
+                    atomicSub(&concentrations[idx_concentration_src], 1);
+                    exchanged = true;
+                } else {
+                    // It couldn't be moved
+                    atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
+                    exchanged = false;
+                }
+            } else {
+                // Particle doesn't fit
+                atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
+                exchanged = false;
+            }
+            break;
         }
-    } else {
-        // Particle doesn't fit
-        atomicSub(&occupancyDest[idx_occupancy_dest], 1u);
+        
     }
+    atomicStore(&lock[idx_occupancy_dest], 0u);
 }
 
 
@@ -119,7 +137,7 @@ fn probability_value(src_region: u32, dest_region: u32, particle: u32) -> f32 {
 
 fn create_probability_vector(volume_id: vec3<u32>, particle: u32, cumulative_probability: ptr<function, array<f32, 7>>) {
     // Fix: probabilities should be equal in all directions
-    var probability_vector: array<f32, 7>;
+    // var probability_vector: array<f32, 7>;
     let src_region = regions[get_index_occupancy(volume_id, params)];
     // -x
     if (volume_id.x > 0u) {

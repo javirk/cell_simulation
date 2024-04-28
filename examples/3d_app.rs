@@ -106,15 +106,16 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
         1280, // width
     ];
 
-    let lattice_resolution = [64, 64, 128];
+    let lattice_resolution = [32, 32, 64];
     let dimensions: [f32; 3] = [0.8, 0.8, 2.];
+    // let lattice_resolution = [1, 2, 2];
+    // let dimensions = [1., 1., 1.];
     let tau = 3E-3;
     let lambda = 31.25E-9;
     
     let render_params = RenderParams::new(device, &render_param_data);
     let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
     let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R32Float, false, &device);
-    
     let mut simulation = Simulation::new(simulation_params);
 
     // simulation.add_region(RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.25], radius: 0.125 }, 8.15E-14/6.);
@@ -126,31 +127,43 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     //     shell_name: "one".to_string(), interior_name: "two".to_string(), p0: [0.5, 0., 0.1], pf: [0.5, 0.5, 0.4], internal_radius: 0.125, external_radius: 0.25 
     // }, 8.15E-14/6.);
     // simulation.add_region(RegionType::SemiSphere { name: "one".to_string(), center: [0.5,0.5,0.5], radius: 0.5, direction: [0., 0., 1.] }, 8.15E-14/6.);
+
     simulation.add_region(RegionType::Capsid { 
         shell_name: "membrane".to_string(), interior_name: "interior".to_string(), center: [0.4, 0.4, 1.], dir: [0., 0., 1.], internal_radius: 0.37, external_radius: 0.4, total_length: 2. 
-    }, 8.15E-14/6.);
-    let base_region = RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.25], radius: 0.1 };
+    }, 0.); //8.15E-14/6.);
+
+    // let base_region = RegionType::Sphere { name: "one".to_string(), center: [0.5,0.5,0.25], radius: 0.1 };
     // simulation.add_sparse_region("sparse", base_region, "interior", 10000, 0.);
 
     simulation.prepare_regions();
 
-    // simulation.particle_random_walk("A", "interior", 0.2, 0.05, 0.002, false);
+    // simulation.particle_random_walk("A", "interior", 0.4, 0.015, 0.015, true);
 
     simulation.add_particle_count("A", "interior", 5000, true, false);
-    // simulation.add_particle_count("B", "interior", 5000, false, false);
-    // simulation.add_particle_count("C", "interior", 0, false, false);
+    simulation.add_particle_count("B", "interior", 5000, false, false);
+    simulation.add_particle_count("C", "interior", 0, false, false);
+    simulation.set_diffusion_rate_particle("A", "interior", 8.15E-14/6.);
+    simulation.set_diffusion_rate_particle("B", "interior", 8.15E-14/6.);
+    simulation.set_diffusion_rate_particle("C", "interior", 8.15E-14/6.);
     // simulation.add_particle_count("D", "membrane", 5000, false, false);
     // simulation.fill_region("E", "sparse", false);
-    //simulation.add_particle_concentration("Iex", "membrane", 0.10, false, true);
+    simulation.add_particle_concentration("Iex", "membrane", 0.10, false, true);
 
-    // simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
-    // simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
+    // simulation.add_region(RegionType::Cube { name: "one".to_string(), p0: [0., 0., 0.], pf: [1., 1., 1.] }, 8.15E-14/6.);  // 
+    // simulation.prepare_regions();
+
+    // simulation.add_particle_count("A", "one", 5, true, false);
+    // simulation.add_particle_count("B", "one", 5, true, false);
+    // simulation.add_particle_count("C", "one", 0, true, false);
+
+    simulation.add_reaction(vec!["A", "B"], vec!["C"], 5.82);
+    simulation.add_reaction(vec!["C"], vec!["A", "B"], 0.351);
 
     simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
 
     let renderer = Render3D::new(&uniform_buffer, &texture, &simulation.lattice_params, &render_params, &state.config(), device);
 
-    let stats_container = make_all_stats(vec!["A"]);
+    let stats_container = make_all_stats(vec!["A", "B", "C"]);
     
     CellSimulation {
         simulation,
@@ -163,24 +176,21 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 fn step_system(
     simulation: &mut CellSimulation,
     mut mouse_slice: i32,
-    view: &wgpu::TextureView,
     device: &wgpu::Device,
-    queue: &wgpu::Queue
+    queue: &wgpu::Queue,
+    command_encoder: &mut wgpu::CommandEncoder
 ) -> i32 {
     mouse_slice = mouse_slice.max(0).min(simulation.simulation.lattice_params.raw.res[2] as i32 - 1);
     let frame_num = simulation.uniform_buffer.data.frame_num;
-    let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    //let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-    simulation.simulation.step(frame_num, &mut command_encoder, device);
-
-    _ = simulation.renderer.render(&mut command_encoder, &view);
+    simulation.simulation.step(frame_num, command_encoder, device, 50);
     
     simulation.uniform_buffer.data.frame_num += 1;
     simulation.uniform_buffer.data.itime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u32;
     simulation.uniform_buffer.data.slice = mouse_slice as u32;
 
     queue.write_buffer(&simulation.uniform_buffer.buffer, 0, bytemuck::cast_slice(&[simulation.uniform_buffer.data]));
-    queue.submit(Some(command_encoder.finish()));
 
     return mouse_slice;
 }
@@ -275,22 +285,11 @@ pub async fn run() {
                         }
                         _ => {}
                     }
+                    state.window().request_redraw(); // Redraw after any input
                 }
             }
             Event::RedrawRequested(window_id) if window_id == state.window().id() => {
                 // Main part
-                {
-                    accum_time += last_frame_inst.elapsed().as_secs_f32();
-                    last_frame_inst = Instant::now();
-                    frame_count += 1;
-                    if frame_count == 100 {
-                        fps = frame_count as f32 / accum_time;
-                        accum_time = 0.0;
-                        frame_count = 0;
-                    }
-                    time += simulation.simulation.lattice_params.raw.tau;
-                }
-
                 let frame = match state.surface().get_current_texture() {
                     Ok(frame) => frame,
                     Err(e) => {
@@ -306,12 +305,9 @@ pub async fn run() {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 
-                slice_wheel = step_system(&mut simulation, slice_wheel, &view, &state.device, &state.queue);
-                {
-                    while let Some(sample) = simulation.simulation.stats.pop_front() {
-                        simulation.all_stats.entry(sample.name).and_modify(|k| k.add(sample.iteration_count, sample.value as f32));
-                    }
-                }
+                let mut encoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                _ = simulation.renderer.render(&mut encoder, &view);
+                
 
                 let slice_name = match simulation.uniform_buffer.data.slice_axis {
                     0 => "X",
@@ -348,11 +344,9 @@ pub async fn run() {
                                     .build();
                             }
                         });
-                    
-                    // ui.show_metrics_window(&mut true);
                 }
 
-                let mut encoder: wgpu::CommandEncoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                //let mut encoder: wgpu::CommandEncoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: None,
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -380,9 +374,35 @@ pub async fn run() {
                 frame.present();
             }
             Event::RedrawEventsCleared => {
+                {
+                    accum_time += last_frame_inst.elapsed().as_secs_f32();
+                    last_frame_inst = Instant::now();
+                    frame_count += 1;
+                    if frame_count == 100 {
+                        fps = frame_count as f32 / accum_time;
+                        accum_time = 0.0;
+                        frame_count = 0;
+                    }
+                    time += simulation.simulation.lattice_params.raw.tau;
+                }
+
+                let mut command_encoder = state.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                
+                slice_wheel = step_system(&mut simulation, slice_wheel, &state.device, &state.queue, &mut command_encoder);
+                {
+                    while let Some(sample) = simulation.simulation.stats.pop_front() {
+                        simulation.all_stats.entry(sample.name).and_modify(|k| k.add(sample.iteration_count, sample.value as f32));
+                    }
+                }
+
+                state.queue.submit(Some(command_encoder.finish()));
+                
+                
                 // RedrawRequested will only trigger once, unless we manually
                 // request it.
-                state.window().request_redraw();
+                if frame_count % 2 == 0 {
+                    state.window().request_redraw();
+                }                
             }
             _ => {}
         }
@@ -392,6 +412,7 @@ pub async fn run() {
 use std::env;
 
 fn main() {
-    //env::set_var("RUST_BACKTRACE", "1");
+    env::set_var("RUST_BACKTRACE", "1");
+    env::set_var("RUST_LOG", "simulation=debug");
     pollster::block_on(run());
 }

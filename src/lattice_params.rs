@@ -118,7 +118,7 @@ impl LatticeParams {
     }
 
     pub fn get_res_usize(&self) -> [usize; 3] {
-        self.get_res_usize()
+        self.raw.get_res_usize()
     }
 
     pub fn get_res_f32(&self) -> [f32; 3] {

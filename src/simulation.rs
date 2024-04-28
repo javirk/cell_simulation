@@ -1,6 +1,7 @@
 use std::collections::{VecDeque, HashMap};
 use cgmath::num_traits::Pow;
 
+use log::{debug, info};
 use tensor_wgpu::{Tensor2, Tensor3, Tensor1};
 use wgpu::{util::DeviceExt};
 use ndarray::{prelude::*, StrideShape};
@@ -14,7 +15,7 @@ use crate::{
     cme::CME,
     reactions_params::ReactionParams,
     statistics::{StatisticsGroup, SolverStatisticSample},
-    region::{RegionType, Regions, Random, Sphere}
+    region::{RegionType, Regions, Sphere}
 };
 
 
@@ -34,7 +35,7 @@ pub struct Simulation {
     reactions_idx: Tensor2<u32>,
     reaction_rates: Tensor2<f32>,
     reaction_params: ReactionParams,
-    texture_compute_pipeline: Option<wgpu::ComputePipeline>
+    texture_compute_pipeline: Option<wgpu::ComputePipeline>,
 }
 
 
@@ -48,7 +49,7 @@ impl Simulation {
         for _ in 0..2 {
             lattices.push(Lattice::new(&lattice_params.raw))
         }
-
+        
         let shape_regions = lattice_params.get_res_usize().f();
         let initial_volume = lattice_params.res().iter().product::<u32>();
 
@@ -84,7 +85,6 @@ impl Simulation {
             texture_compute_pipeline: None,
             statistics_groups: None,
             stats: VecDeque::<SolverStatisticSample<i32>>::new()
-
         }
         
     }
@@ -93,7 +93,8 @@ impl Simulation {
         &mut self,
         frame_num: u32,
         command_encoder: &mut wgpu::CommandEncoder,
-        device: &wgpu::Device
+        device: &wgpu::Device,
+        write_freq: u32
     ) {
         self.rdme.as_ref()
             .expect("RDME must be initialized first")
@@ -135,7 +136,7 @@ impl Simulation {
             self.lattices[frame_num as usize % 2].occupancy.buffer_size() as u64
         );
 
-        if frame_num % 100 == 0 && frame_num > 0 {
+        if frame_num % write_freq == 0 && frame_num > 0 {
             pollster::block_on(self.start_error_buffer_readbacks(device, frame_num));
         }
 
@@ -155,7 +156,7 @@ impl Simulation {
         
         // Diffusion matrix
         self.diffusion_matrix.create_buffer(device, usage, Some("Diffusion matrix buffer"));
-        println!("Diffusion matrix {}", self.diffusion_matrix);
+        debug!("Diffusion matrix {}", self.diffusion_matrix);
 
         // Regions
         self.regions.regions.create_buffer(device, usage, Some("Regions Buffer"));
@@ -306,7 +307,7 @@ impl Simulation {
                     center[1] + dir[1] * cylinder_length / 2.,
                     center[2] + dir[2] * cylinder_length / 2.
                 ];
-                println!("p0: {:?}, pf: {:?}", p0, pf);
+                debug!("p0: {:?}, pf: {:?}", p0, pf);
                 let neg_dir = [-dir[0], -dir[1], -dir[2]];
                 self.add_region_cylinder(&shell_name, p0, pf, external_radius, diffusion_rate, transition_rate);
                 self.add_region_cylinder(&interior_name, p0, pf, internal_radius, diffusion_rate, transition_rate);
@@ -323,12 +324,13 @@ impl Simulation {
             }
             _ => panic!("Region type not implemented yet")
         }
+        info!("Added region {:?}", self.regions.types.last().unwrap());
     }
 
     pub fn add_sparse_region(&mut self, name: &str, base_region: RegionType, to_region: &str, max_volume: u32, diffusion_rate: f32) {
         let to_region_idx = self.find_region_index(to_region).unwrap();
         assert!(self.regions.volumes[to_region_idx] > max_volume);
-        println!("Volume of {} is {}", to_region, self.regions.volumes[to_region_idx]);
+        debug!("Volume of {} is {}", to_region, self.regions.volumes[to_region_idx]);
 
         let transition_rate: f32 = 0.; //8.15E-14 / 6.;
         let voxel_size = self.lattice_params.get_voxel_size();
@@ -346,38 +348,10 @@ impl Simulation {
         let new_region_idx = self.regions.types.len() as Region;
 
         let mut curr_volume = 0u32;
-        let mut retries = 0u32;
         let mut added = false;
-        while (curr_volume < max_volume) && (retries < 10) {
-            // Steps:
-            // 1. Generate a random point inside the region.
-            // 2. Check if the point or the surroundings belong to the region. If not, return to 1.
-            // 3. Make sure that the whole base_region fits inside the to_region. If not, return to 1.
-            // 4. Add the point to the region. TODO: This should be a method of the region
-            
-            let point = self.regions.types[to_region_idx].generate_lattice(voxel_size);
-            println!("Point: {:?}", point);
-            if self.regions.get_value_position(point) as usize != to_region_idx {
-                retries += 1;
-                continue;
-            }
-
-            // Make sure it fits
-            if point[0] < radius_voxels[0] || point[1] < radius_voxels[1] || point[2] < radius_voxels[2] {
-                    retries += 1;
-                    continue;
-            }
-            let data = self.regions.regions.data.slice(
-                s![point[0] - radius_voxels[0]..point[0] + radius_voxels[0], 
-                point[1] - radius_voxels[1]..point[1] + radius_voxels[1], 
-                point[2] - radius_voxels[2]..point[2] + radius_voxels[2]]
-            );  // This is a very ugly and hacky way of slicing the tensor, but it's probably the fastest
-
-            if data.sum() != (to_region_idx * data.len()) as u32 {
-                // The whole base region doesn't fit inside the to_region
-                retries += 1;
-                continue;
-            }
+        while curr_volume < max_volume {            
+            // Generate a random point making sure that the sphere fits.
+            let point = self.regions.generate_boundary_aware(to_region_idx, voxel_size, &radius_voxels);
 
             // Add the region iterating over the tensor
             for i in point[0] - radius_voxels[0]..point[0] + radius_voxels[0] {
@@ -682,6 +656,8 @@ impl Simulation {
         if logging {
             self.lattices[0].logging_particles.push(particle_idx);
         }
+        info!("{} particles of type {} added to region {}", count, name, to_region);
+        debug!("Concentrations after adding particles: {}", self.lattices[0].concentrations);
     }
 
     pub fn add_particle_concentration(&mut self, name: &str, to_region: &str, concentration: f32, logging: bool, is_reservoir: bool) {
@@ -689,8 +665,8 @@ impl Simulation {
         let region_idx = self.find_region_index(to_region).expect("Region not found");
         let volume = self.regions.volumes[region_idx] as f32;
         let count = (concentration * volume) as u32;
-        println!("Adding {} particles to region {}", count, to_region);
         self.add_particle_count(name, to_region, count, logging, is_reservoir);
+        info!("Concentration {} of particles of type {} added to region {}", concentration, name, to_region);
     }
 
     pub fn fill_region(&mut self, name: &str, to_region: &str, logging: bool) {
@@ -717,8 +693,8 @@ impl Simulation {
 
         self.lattices[0].particle_names.push(String::from(name));
 
-        let regions_idx_buffer = &self.regions.index_buffer.as_ref().unwrap()[&(region_idx as u32)];
-        self.lattices[0].init_random_walk_particles(particle_idx, total_length, block_length, radius, regions_idx_buffer);
+        // let regions_idx_buffer = &self.regions.index_buffer.as_ref().unwrap()[&(region_idx as u32)];
+        let _ = self.lattices[0].init_random_walk_particles(particle_idx, total_length, block_length, radius, region_idx, &self.regions);
 
         // Update the diffusion matrix
         self.diffusion_matrix.copy_dimension(2);
@@ -729,6 +705,8 @@ impl Simulation {
         if logging {
             self.lattices[0].logging_particles.push(particle_idx);
         }
+
+        info!("Particle {} added to region {} as random walk", name, to_region);
 
     }
 
@@ -771,6 +749,7 @@ impl Simulation {
     }
 
     pub fn add_reaction(&mut self, reactants: Vec<&str>, products: Vec<&str>, k: f32) {
+        info!("Adding reaction: {} -> {} with rate {}", reactants.iter().map(|x| *x).collect::<Vec<&str>>().join(" + "), products.iter().map(|x| *x).collect::<Vec<&str>>().join(" + "), k);
         // Add a reaction to the simulation. It is independent of the region since particles are defined per region.
         // Maybe the following can be made two map iters
         let mut reactants_idx = Vec::<usize>::new();
@@ -787,7 +766,7 @@ impl Simulation {
                 None => panic!("Product {} not found", product)
             };
         }
-        println!("Reactants: {:?}, products: {:?}", reactants_idx, products_idx);
+        debug!("Reactants: {:?}, products: {:?}", reactants_idx, products_idx);
 
         // Update stoichiometry matrix
         self.stoichiometry_matrix.enlarge_dimension(0, 0);
@@ -799,18 +778,18 @@ impl Simulation {
         for product_idx in products_idx {
             self.stoichiometry_matrix[[num_rows - 1, product_idx]] += 1;
         }
-        println!("New stoichiometry matrix: {} with {} rows and {} columns", self.stoichiometry_matrix, self.stoichiometry_matrix.shape()[0], self.stoichiometry_matrix.shape()[1]);
+        debug!("New stoichiometry matrix: {} with {} rows and {} columns", self.stoichiometry_matrix, self.stoichiometry_matrix.shape()[0], self.stoichiometry_matrix.shape()[1]);
 
         // Update index matrix
         reactants_idx.extend(std::iter::repeat(0 as usize).take(3 - reactants_idx.len()));
         let reactants_idx_u32 = reactants_idx.iter().map(|x| *x as u32).collect::<Vec<u32>>();
         self.reactions_idx.concatenate_vector(&reactants_idx_u32, 0);
-        println!("Reactants idx : {:?}", reactants_idx_u32);
-        println!("New reactions index matrix: {}", self.reactions_idx);
+        debug!("Reactants idx : {:?}", reactants_idx_u32);
+        debug!("New reactions index matrix: {}", self.reactions_idx);
 
         // Update reaction rates vector
         self.reaction_rates.concatenate_vector(&vec![k], 0);
-        println!("New reaction rates vector: {}", self.reaction_rates);
+        debug!("New reaction rates vector: {}", self.reaction_rates);
         self.reaction_params.raw_params.num_reactions += 1;
     }
 }
@@ -943,6 +922,16 @@ impl Simulation {
                         ty: texture.binding_type(wgpu::StorageTextureAccess::ReadWrite),
                         count: None,
                     },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer { 
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(self.lattices[0].lock_cells.buffer_size() as _),
+                        },
+                        count: None,
+                    },
                 ],
                 label: None
             }
@@ -1063,6 +1052,10 @@ impl Simulation {
                     wgpu::BindGroupEntry {
                         binding: 4,
                         resource: texture.binding_resource(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: self.lattices[0].lock_cells.binding_resource(),
                     },
                 ],
                 label: Some("Lattice bind group"),
