@@ -1,7 +1,9 @@
+use std::fs::File;
 use wgpu::util::DeviceExt;
 use bytemuck::{Pod, Zeroable};
+use std::io::{BufReader, prelude::*};
 
-use crate::MAX_PARTICLES_SITE;
+use crate::{lattice::Lattice, MAX_PARTICLES_SITE, Result};
 
 // ---------------------------------------------------------------------------
 // Structures that are shared between Rust and the compute/fragment shaders.
@@ -133,5 +135,56 @@ impl LatticeParams {
 impl Params {
     pub fn dimensions(&self) -> usize {
         (self.res[0] * self.res[1] * self.res[2]) as usize
+    }
+}
+
+impl LatticeParams {
+    pub fn from_file(sim_file: &str) -> Result<Self> {
+        let file = File::open(sim_file)?;//.expect("file not found!");
+
+        let mut lattice_params = Params {
+            dims: [0.0, 0.0, 0.0],
+            _padding: 0,
+            res: [0, 0, 0],
+            _padding2: 0,
+            max_particles_site: MAX_PARTICLES_SITE as u32,
+            n_regions: 1,
+            lambda: 0.0,
+            tau: 0.0
+        };
+
+        let buf_reader = BufReader::new(file);
+      
+        for line in buf_reader.lines() {
+            let l = line?;
+            if l.len() == 0 {
+                continue;
+            }
+            LatticeParams::add_basic_line(&mut lattice_params, &l);            
+        }
+        Ok(LatticeParams {
+            raw: lattice_params,
+            param_buf: None,
+        })
+    }
+
+    fn add_basic_line(pars: &mut Params, line: &str) {
+        let mut parts = line.split_whitespace();
+        let _ = parts.next();
+        let key = parts.next().unwrap();
+        let value = parts.next().unwrap();
+        match key {
+            "tau" => pars.tau = value.parse().unwrap(),
+            "lambda" => pars.lambda = value.parse().unwrap(),
+            "dims" => {
+                let dims: Vec<f32> = value.split(",").map(|x| x.parse().unwrap()).collect();
+                pars.dims = [dims[0], dims[1], dims[2]];
+            },
+            "res" => {
+                let res: Vec<u32> = value.split(",").map(|x| x.parse().unwrap()).collect();
+                pars.res = [res[0], res[1], res[2]];
+            },
+            _ => (),
+        }
     }
 }

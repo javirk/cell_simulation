@@ -337,3 +337,4 @@ launch.json
 debugging_captures
 *.csv
 Cargo.lock
+.DS_Store

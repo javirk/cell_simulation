@@ -64,3 +64,18 @@ pub fn random_walk_direction(rng: &mut ThreadRng, lattice: &Lattice, site: &[u32
     }
     direction
 }
+
+pub fn split_whitespace(s: &str) -> Vec<&str> {
+    let words: Vec<&str> = s.split_whitespace().collect();
+    return words;
+}
+
+pub fn split_comma(s: &str) -> Vec<&str> {
+    let words: Vec<&str> = s.split(",").collect();
+    return words;
+}
+
+pub fn split_comma_f32(s: &str) -> Vec<f32> {
+    let words: Vec<f32> = s.split(",").map(|x| x.parse().unwrap()).collect();
+    return words;
+}

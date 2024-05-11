@@ -1,3 +1,4 @@
+use std::io::Error;
 pub use lattice_params::LatticeParams;
 pub use simulation::Simulation;
 pub use setup::Setup;
@@ -7,6 +8,8 @@ pub use texture::Texture;
 pub use renderer_3d::Render3D;
 pub use renderer_2d::Render2D;
 pub use region::{Cube, Sphere, RegionType};
+
+type Result<T> = std::result::Result<T, Error>;
 
 const MAX_PARTICLES_SITE: usize = 8;  // Never larger than 16
 const RDME_WORKGROUP_SIZE: (u32, u32, u32) = (1, 1, 1);

@@ -1,0 +1,65 @@
+{
+  "params": {
+    "lattice_resolution": [32, 32, 64],
+    "dimensions": [0.8, 0.8, 2.0],
+    "tau": 3e-3,
+    "lambda": 31.25e-9
+  },
+  "regions": [
+    {
+      "type": "capsid",
+      "shell_name": "membrane",
+      "interior_name": "interior",
+      "center": [0.4, 0.4, 1.0],
+      "dir": [0.0, 0.0, 1.0],
+      "internal_radius": 0.37,
+      "external_radius": 0.4, 
+      "total_length": 2.0,
+      "base_diffusion_rate": 8.15e-14
+    }
+  ],
+  "particles": [
+    {
+      "name": "A",
+      "to_region": "interior",
+      "count": 5000,
+      "logging": true,
+      "is_reservoir": false,
+      "diffusion_rate": {
+        "interior": 8.15e-14
+      }
+    },
+    {
+      "name": "B",
+      "to_region": "interior",
+      "count": 5000,
+      "logging": true,
+      "is_reservoir": false,
+      "diffusion_rate": {
+        "interior": 8.15e-14
+      }
+    },
+    {
+      "name": "C",
+      "to_region": "interior",
+      "count": 0,
+      "logging": true,
+      "is_reservoir": false
+    },
+    {
+      "name": "IeX",
+      "to_region": "membrane",
+      "concentration": 0.10,
+      "logging": false,
+      "is_reservoir": true
+    }
+  ],
+  "reactions": {
+    "A + B -> C": {
+      "rate": 5.82
+    },
+    "C -> A + B": {
+      "rate": 0.351
+    }
+  }
+}
