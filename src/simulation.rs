@@ -211,7 +211,8 @@ impl Simulation {
         file.read_to_string(&mut buff).unwrap();
      
         let data: Value = serde_json::from_str(&buff).unwrap();
-        println!("Params: {}", data["params"]);
+        println!("Params: {}", data["parameters"]);
+        let lattice_params = LatticeParams::from_json_value(&data["parameters"]);
 
         // Mock values for now:
         let lattice_resolution = [32, 32, 64];

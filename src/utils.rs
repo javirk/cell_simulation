@@ -81,15 +81,17 @@ pub fn split_comma_f32(s: &str) -> Vec<f32> {
     return words;
 }
 
-pub fn json_value_to_array<T>(value: &serde_json::Value) -> [T; 3]
-where
-    T: Deserialize<'static> + Copy,
+pub fn json_value_to_array<f32>(value: &serde_json::Value) -> [f32; 3] //-> [T; 3]
+// where
+//     T: Deserialize<'static> + Copy + std::str::FromStr,
 {
-    let array: Vec<T> = value
+    let array: Vec<f32> = value
         .as_array()
         .unwrap()
         .iter()
         .map(|v| v.as_str().unwrap().parse().unwrap())
         .collect();
     [array[0], array[1], array[2]]
+    // println!("El valor: {:?}", value.as_array().unwrap());
+    // [1., 1., 1.]
 }

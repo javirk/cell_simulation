@@ -142,16 +142,28 @@ impl Params {
 }
 
 impl LatticeParams {
-    pub fn from_json_value(parameters: Value) -> Self {
-        let mut lattice_params: Params = Params {
-            dims: json_value_to_array(&parameters["dimensions"]),
+    pub fn from_json_value(parameters: &Value) -> Self {
+        json_value_to_array::<[f32; 3]>(&parameters["dimensions"]);
+        // let mut lattice_params: Params = Params {
+        //     dims: json_value_to_array(&parameters["dimensions"]),
+        //     _padding: 0,
+        //     res: json_value_to_array(&parameters["lattice_resolution"]),
+        //     _padding2: 0,
+        //     max_particles_site: MAX_PARTICLES_SITE as u32,
+        //     n_regions: 1,
+        //     lambda: parameters["lambda"].as_f64().unwrap() as f32,
+        //     tau: parameters["tau"].as_f64().unwrap() as f32
+        // };
+
+        let lattice_params = Params {
+            dims: [0.8, 0.8, 2.0],
             _padding: 0,
-            res: json_value_to_array(&parameters["lattice_resolution"]),
+            res: [32, 32, 64],
             _padding2: 0,
             max_particles_site: MAX_PARTICLES_SITE as u32,
             n_regions: 1,
-            lambda: parameters["lambda"].as_f64().unwrap() as f32,
-            tau: parameters["tau"].as_f64().unwrap() as f32
+            lambda: 0.3,
+            tau: 0.3
         };
         
         LatticeParams {
