@@ -1,4 +1,5 @@
 use rand::{Rng, rngs::ThreadRng};
+use serde::Deserialize;
 
 use crate::lattice::Lattice;
 
@@ -78,4 +79,17 @@ pub fn split_comma(s: &str) -> Vec<&str> {
 pub fn split_comma_f32(s: &str) -> Vec<f32> {
     let words: Vec<f32> = s.split(",").map(|x| x.parse().unwrap()).collect();
     return words;
+}
+
+pub fn json_value_to_array<T>(value: &serde_json::Value) -> [T; 3]
+where
+    T: Deserialize<'static> + Copy,
+{
+    let array: Vec<T> = value
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().parse().unwrap())
+        .collect();
+    [array[0], array[1], array[2]]
 }

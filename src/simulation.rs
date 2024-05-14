@@ -2,11 +2,14 @@ use std::fs::File;
 use std::collections::{VecDeque, HashMap};
 use cgmath::num_traits::Pow;
 use std::io::{BufReader, prelude::*};
+use std::path::Path;
+use serde_json::{Result, Value};
 
 use log::{debug, info};
 use tensor_wgpu::{Tensor2, Tensor3, Tensor1};
 use wgpu::{util::DeviceExt};
 use ndarray::{prelude::*, StrideShape};
+use crate::MAX_PARTICLES_SITE;
 use crate::{
     rdme::RDME, 
     texture::Texture, 
@@ -18,8 +21,6 @@ use crate::{
     reactions_params::ReactionParams,
     statistics::{StatisticsGroup, SolverStatisticSample},
     region::{RegionType, Regions, Sphere},
-    Result,
-    utils::{split_whitespace, split_comma_f32}
 };
 
 
@@ -204,130 +205,34 @@ impl Simulation {
         self.cme = Some(cme);
     }
 
-    pub fn from_file(sim_file: &str, ) -> Result<(Self, LatticeParams)> {
-        // Load the simulation parameters first
-        let simulation_params = LatticeParams::from_file(sim_file)?;
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<(Self)> {
+        let mut file = File::open(path).unwrap();
+        let mut buff = String::new();
+        file.read_to_string(&mut buff).unwrap();
+     
+        let data: Value = serde_json::from_str(&buff).unwrap();
+        println!("Params: {}", data["params"]);
 
-        // Load the simulation from a file
-        let file = File::open(sim_file)?;//.expect("file not found!");
-        
+        // Mock values for now:
+        let lattice_resolution = [32, 32, 64];
+        let dimensions: [f32; 3] = [0.8, 0.8, 2.];
+        // let lattice_resolution = [1, 2, 2];
+        // let dimensions = [1., 1., 1.];
+        let tau = 3E-3;
+        let lambda = 31.25E-9;
+        let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
+
         let mut simulation = Simulation::new(simulation_params);
 
-        let buf_reader = BufReader::new(file);
-      
-        for line in buf_reader.lines() {
-            let l = line?;
-            if l.len() == 0 {
-                continue;
-            }
-            LatticeParams::add_basic_line(&mut lattice_params, &l);            
-        }
-        
-        (lattice_params)
+        Ok(simulation)
+
     }
 
 }
 
-// Read from the file
+// Read from json
 impl Simulation {
-    fn add_reaction_line(sim: &mut Simulation, line: &str) {
-        let line_replaced = &line.replace("+", "");
-        let mut line_vec = split_whitespace(line_replaced);
-        line_vec = line_vec[1..].to_vec();
-
-        // Reference: reactants: Vec<&str>, products: Vec<&str>, k: f32
-        let mut reactants: Vec<&str> = Vec::new();
-        let mut products: Vec<&str> = Vec::new();
-        let mut k: f32 = 1.;
-
-        let mut before_arrow: bool = true;
-
-        for value in line_vec {
-            match value.parse::<f32>() {
-                Ok(new_k) => {
-                    k = k*new_k;
-                    continue;
-                },
-                Err(_) => ()
-            };
-            match value {
-                "->" => before_arrow = false,
-                "+" => (),
-                _ => {
-                    if before_arrow {
-                        reactants.push(value);
-                    } else {
-                        products.push(value);
-                    }
-                }
-            }
-        }
-        sim.add_reaction(reactants, products, k);
-    }
-
-    fn add_species_line(sim: &mut Simulation, line: &str) {
-        let line_vec = split_whitespace(line);
-        assert!(line_vec.len() >= 4);
-        let species_name = line_vec[1];
-        let species_region = line_vec[2];
-        let mut species_number: f32 = 1.;
-
-        for v in &line_vec[3..] {
-            species_number *= v.parse::<f32>().unwrap();
-        }
-
-        sim.add_particle_count(species_name, species_region, species_number, false, false);
-    }
-
-    fn add_region_line(sim: &mut Simulation, line: &str) {
-        let line_vec = split_whitespace(line);
-        assert!(line_vec.len() >= 4);
-        let region_type = line_vec[1];
-        let region_name = line_vec[2];
-        let region_diffusion_rate = line_vec[3].parse::<f32>().unwrap();
-        let region_transition_rate = line_vec[4].parse::<f32>().unwrap();
-
-        match region_type {
-            "cube" => {
-                let p0: [f32; 3] = split_comma_f32(line_vec[5]).try_into().unwrap();
-                let pf: [f32; 3] = split_comma_f32(line_vec[6]).try_into().unwrap();
-                sim.add_region_cube(&region_name, p0, pf, region_diffusion_rate, region_transition_rate);
-            },
-            "sphere" => {
-                let center: [f32; 3] = split_comma_f32(line_vec[5]).try_into().unwrap();
-                let radius = line_vec[6].parse::<f32>().unwrap();
-                sim.add_region_sphere(&region_name, center, radius, region_diffusion_rate, region_transition_rate);
-            },
-            "cylinder" => {
-                let p0: [f32; 3] = split_comma_f32(line_vec[5]).try_into().unwrap();
-                let pf: [f32; 3] = split_comma_f32(line_vec[6]).try_into().unwrap();
-                let radius = line_vec[7].parse::<f32>().unwrap();
-                sim.add_region_cylinder(&region_name, p0, pf, radius, region_diffusion_rate, region_transition_rate);
-            },
-            "semisphere" => {
-                let center: [f32; 3] = split_comma_f32(line_vec[5]).try_into().unwrap();
-                let radius = line_vec[6].parse::<f32>().unwrap();
-                let direction: [f32; 3] = split_comma_f32(line_vec[7]).try_into().unwrap();
-                sim.add_region_semisphere(&region_name, center, radius, direction, region_diffusion_rate, region_transition_rate);
-            },
-            "capsid" => {
-                let shell_name = line_vec[5];
-                let interior_name = line_vec[6];
-                let center: Vec<f32> = line_vec[7].split(",").map(|x| x.parse::<f32>().unwrap()).collect();
-                let dir: Vec<f32> = line_vec[8].split(",").map(|x| x.parse::<f32>().unwrap()).collect();
-                let internal_radius = line_vec[9].parse::<f32>().unwrap();
-                let external_radius = line_vec[10].parse::<f32>().unwrap();
-                let total_length = line_vec[11].parse::<f32>().unwrap();
-
-                RegionType::Capsid { 
-                    shell_name: "membrane".to_string(), interior_name: "interior".to_string(), center: [0.4, 0.4, 1.], dir: [0., 0., 1.], internal_radius: 0.37, external_radius: 0.4, total_length: 2. 
-                };
-
-                sim.add_region_capsid(&shell_name, &interior_name, center, dir, internal_radius, external_radius, total_length, region_diffusion_rate, region_transition_rate);
-            },
-            _ => panic!("Region type not implemented yet")
-        }
-    }
+    
 }
 
 // Statistics
