@@ -1,3 +1,4 @@
+use cgmath::num_traits::ToPrimitive;
 use rand::{Rng, rngs::ThreadRng};
 use serde::Deserialize;
 
@@ -81,17 +82,18 @@ pub fn split_comma_f32(s: &str) -> Vec<f32> {
     return words;
 }
 
-pub fn json_value_to_array<f32>(value: &serde_json::Value) -> [f32; 3] //-> [T; 3]
-// where
-//     T: Deserialize<'static> + Copy + std::str::FromStr,
+pub fn json_value_to_array<T>(value: &serde_json::Value) -> [T; 3] //-> [T; 3]
+where
+     T: Deserialize<'static> + Copy + From<f64>,
 {
-    let array: Vec<f32> = value
+    let array: Vec<f64> = value
         .as_array()
         .unwrap()
         .iter()
-        .map(|v| v.as_str().unwrap().parse().unwrap())
+        .map(|v| v.as_f64().unwrap())
         .collect();
-    [array[0], array[1], array[2]]
+    let array_t: Vec<T> = array.into_iter().map(|v| T::from(v)).collect();
+    [array_t[0], array_t[1], array_t[2]]
     // println!("El valor: {:?}", value.as_array().unwrap());
     // [1., 1., 1.]
 }
