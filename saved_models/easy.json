@@ -5,6 +5,10 @@
     "tau": 3e-3,
     "lambda": 31.25e-9
   },
+  "rendering": {
+    "width": 720,
+    "height": 1280
+  },
   "regions": [
     {
       "type": "capsid",
@@ -55,11 +59,7 @@
     }
   ],
   "reactions": {
-    "A + B -> C": {
-      "rate": 5.82
-    },
-    "C -> A + B": {
-      "rate": 0.351
-    }
+    "A + B -> C": 5.82,
+    "C -> A + B": 0.351
   }
 }

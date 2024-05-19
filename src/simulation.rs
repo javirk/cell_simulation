@@ -1,3 +1,4 @@
+use std::default;
 use std::fs::File;
 use std::collections::{VecDeque, HashMap};
 use cgmath::num_traits::Pow;
@@ -21,6 +22,7 @@ use crate::{
     reactions_params::ReactionParams,
     statistics::{StatisticsGroup, SolverStatisticSample},
     region::{RegionType, Regions, Sphere},
+    utils::{json_to_array, split_whitespace}
 };
 
 
@@ -205,35 +207,138 @@ impl Simulation {
         self.cme = Some(cme);
     }
 
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<(Self)> {
+    pub fn from_file<P: AsRef<Path>>(path: P, device: &wgpu::Device) -> Result<(Self, Texture)> {
         let mut file = File::open(path).unwrap();
         let mut buff = String::new();
         file.read_to_string(&mut buff).unwrap();
      
         let data: Value = serde_json::from_str(&buff).unwrap();
-        println!("Params: {}", data["parameters"]);
-        let lattice_params = LatticeParams::from_json_value(&data["parameters"]);
-
-        // Mock values for now:
-        let lattice_resolution = [32, 32, 64];
-        let dimensions: [f32; 3] = [0.8, 0.8, 2.];
-        // let lattice_resolution = [1, 2, 2];
-        // let dimensions = [1., 1., 1.];
-        let tau = 3E-3;
-        let lambda = 31.25E-9;
-        let simulation_params = LatticeParams::new(dimensions, lattice_resolution, tau, lambda);
+        let simulation_params = LatticeParams::from_json_value(&data["parameters"]);
 
         let mut simulation = Simulation::new(simulation_params);
+        simulation.json_regions(&data["regions"]);
+        simulation.prepare_regions();
+        simulation.json_particles(&data["particles"]);
+        simulation.json_reactions(&data["reactions"]);
 
-        Ok(simulation)
+        // Create texture for GPU
+        let lattice_resolution_usize = simulation.lattice_params.get_res_usize();
+        let lattice_resolution: [u32; 3] = [lattice_resolution_usize[0] as u32, lattice_resolution_usize[1] as u32, lattice_resolution_usize[2] as u32];
+        let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R32Float, false, &device);
 
+        Ok((simulation, texture))
     }
 
 }
 
 // Read from json
 impl Simulation {
+    fn json_regions(&mut self, regions: &Value) {
+        // regions is a list of regions. Loop over them and add
+        assert!(regions.is_array());
+        for region in regions.as_array().unwrap() {
+            let region_type = region["type"].as_str().unwrap();
+            match region_type {
+                "cube" => {
+                    let name = region["name"].as_str().unwrap();
+                    let p0: [f32; 3] = json_to_array(&region["p0"]).unwrap();
+                    let pf: [f32; 3] = json_to_array(&region["pf"]).unwrap();
+                    let diffusion_rate = region["base_diffusion_rate"].as_f64().unwrap() as f32;
+                    self.add_region(RegionType::Cube {
+                        name: name.to_string(), 
+                        p0, 
+                        pf
+                    }, diffusion_rate);
+                },
+                "capsid" => {
+                    let shell_name = region["shell_name"].as_str().unwrap();
+                    let interior_name = region["interior_name"].as_str().unwrap();
+                    let center: [f32; 3] = json_to_array(&region["center"]).unwrap();
+                    let dir: [f32; 3] = json_to_array(&region["dir"]).unwrap();
+                    let internal_radius = region["internal_radius"].as_f64().unwrap() as f32;
+                    let external_radius = region["external_radius"].as_f64().unwrap() as f32;
+                    let total_length = region["total_length"].as_f64().unwrap() as f32;
+                    let diffusion_rate = region["base_diffusion_rate"].as_f64().unwrap() as f32;
+                    // let transition_rate = region["transition_rate"].as_f64().unwrap() as f32;
+                    self.add_region(RegionType::Capsid { 
+                        shell_name: shell_name.to_string(), 
+                        interior_name: interior_name.to_string(), 
+                        center, 
+                        dir, 
+                        internal_radius,
+                        external_radius, 
+                        total_length 
+                    }, diffusion_rate);
+                },
+                _ => panic!("Region type not implemented yet")
+            }
+        }
+    }
     
+    fn json_particles(&mut self, particles: &Value) {
+        // particles is a list of particles. Loop over them and add
+        assert!(particles.is_array());
+        for particle in particles.as_array().unwrap() {
+            let name = particle["name"].as_str().unwrap();
+            let to_region = particle["to_region"].as_str().unwrap();
+            let logging = particle["logging"].as_bool().unwrap();
+            let is_reservoir = particle["is_reservoir"].as_bool().unwrap();
+
+            if particle.get("count") != None {
+                let count = particle["count"].as_u64().unwrap() as u32;
+                self.add_particle_count(name, to_region, count, logging, is_reservoir);
+            } else if particle.get("concentration") != None {
+                let concentration = particle["concentration"].as_f64().unwrap() as f32;
+                self.add_particle_concentration(name, to_region, concentration, logging, is_reservoir);
+                
+            } else {
+                panic!("Particle must have count or concentration");
+            }
+            let diffusion_rate = particle["diffusion_rate"].as_object().unwrap();
+            for (region, value) in diffusion_rate.iter() {
+                let rate = value.as_f64().unwrap() as f32;
+                self.set_diffusion_rate_particle(name, region, rate);
+            }
+        }
+    }
+
+    fn json_reactions(&mut self, reactions: &Value) {
+        // reactions are objects "reaction" : f32
+        for (reaction_str, value) in reactions.as_object().unwrap() {
+            let reaction = reaction_str.as_str();
+            let mut line_vec = split_whitespace(reaction);
+            line_vec = line_vec[1..].to_vec();
+    
+            // Reference: reactants: Vec<&str>, products: Vec<&str>, k: f32
+            let mut reactants: Vec<&str> = Vec::new();
+            let mut products: Vec<&str> = Vec::new();
+            let mut k: f32 = value.as_f64().unwrap() as f32;
+    
+            let mut before_arrow: bool = true;
+    
+            for value in line_vec {
+                match value.parse::<f32>() {
+                    Ok(new_k) => {
+                        k = k*new_k;
+                        continue;
+                    },
+                    Err(_) => ()
+                };
+                match value {
+                    "->" => before_arrow = false,
+                    "+" => (),
+                    _ => {
+                        if before_arrow {
+                            reactants.push(value);
+                        } else {
+                            products.push(value);
+                        }
+                    }
+                }
+            }
+            self.add_reaction(reactants, products, k);
+        }
+    }
 }
 
 // Statistics

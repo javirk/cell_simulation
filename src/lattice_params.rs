@@ -1,12 +1,11 @@
 use std::fs::File;
-use anyhow::Ok;
 use wgpu::util::DeviceExt;
 use bytemuck::{Pod, Zeroable};
 use std::io::{BufReader, prelude::*};
 use serde_json::Value;
 use std::error::Error;
 
-use crate::{lattice::Lattice, MAX_PARTICLES_SITE, utils::json_value_to_array};
+use crate::{lattice::Lattice, MAX_PARTICLES_SITE, utils::json_to_array};
 
 // ---------------------------------------------------------------------------
 // Structures that are shared between Rust and the compute/fragment shaders.
@@ -143,27 +142,21 @@ impl Params {
 
 impl LatticeParams {
     pub fn from_json_value(parameters: &Value) -> Self {
-        json_value_to_array::<[f32; 3]>(&parameters["dimensions"]);
-        // let mut lattice_params: Params = Params {
-        //     dims: json_value_to_array(&parameters["dimensions"]),
-        //     _padding: 0,
-        //     res: json_value_to_array(&parameters["lattice_resolution"]),
-        //     _padding2: 0,
-        //     max_particles_site: MAX_PARTICLES_SITE as u32,
-        //     n_regions: 1,
-        //     lambda: parameters["lambda"].as_f64().unwrap() as f32,
-        //     tau: parameters["tau"].as_f64().unwrap() as f32
-        // };
+        let dimensions = json_to_array::<f32>(&parameters["dimensions"]).unwrap();
+        let resolution = json_to_array::<u32>(&parameters["lattice_resolution"]).unwrap();
+        let lambda = parameters["lambda"].as_f64().unwrap() as f32;
+        let tau = parameters["tau"].as_f64().unwrap() as f32;
+
 
         let lattice_params = Params {
-            dims: [0.8, 0.8, 2.0],
+            dims: dimensions,
             _padding: 0,
-            res: [32, 32, 64],
+            res: resolution,
             _padding2: 0,
             max_particles_site: MAX_PARTICLES_SITE as u32,
             n_regions: 1,
-            lambda: 0.3,
-            tau: 0.3
+            lambda: lambda,
+            tau: tau
         };
         
         LatticeParams {

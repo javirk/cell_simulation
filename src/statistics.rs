@@ -1,5 +1,5 @@
 use tensor_wgpu::Tensor1;
-use std::{collections::HashMap};
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Default, Clone)]
 pub struct SolverStatisticSample<T> {
@@ -68,4 +68,50 @@ impl StatisticsGroup  {
         (bind_group_layout, bind_group)
     }
 
+}
+
+#[derive(Debug)]
+struct StatisticContainer {
+    x: VecDeque<u32>,
+    y: VecDeque<f32>,  // Must be f32 for the UI
+}
+
+impl StatisticContainer {
+
+    fn new(capacity: usize) -> Self {
+        StatisticContainer { x: VecDeque::with_capacity(capacity), y: VecDeque::with_capacity(capacity) }
+    }
+
+    fn add(&mut self, x: u32, y: f32) {
+        while self.x.capacity() == self.x.len() {
+            self.x.pop_front();
+            self.y.pop_front();
+        }
+        self.x.push_back(x);
+        self.y.push_back(y);
+    }
+
+    #[allow(dead_code)]
+    fn mean(&self) -> f32 {
+        let mut sum = 0.;
+        for y in &self.y {
+            sum += y;
+        }
+        sum / self.y.len() as f32
+    }
+
+    fn last(&self) -> f32 {
+        match self.y.back() {
+            Some(y) => *y,
+            None => 0.
+        }
+    }
+}
+
+fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer> {
+    let mut all_stats = HashMap::new();
+    for metric in metrics_log {
+        all_stats.insert(metric.to_string(), StatisticContainer::new(100));
+    }
+    all_stats
 }

@@ -92,14 +92,7 @@ fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer>
 
 
 fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
-    let uniform = Uniform {
-        itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
-        frame_num: 0,
-        slice: 0,
-        slice_axis: 2,
-        rendering_view: 0,
-    };
-    let uniform_buffer = UniformBuffer::new(uniform, device);
+    let uniform_buffer = UniformBuffer::new(device);
 
     let render_param_data: Vec<usize> = vec![
         720, // height
@@ -147,7 +140,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     simulation.set_diffusion_rate_particle("C", "interior", 8.15E-14/6.);
     // simulation.add_particle_count("D", "membrane", 5000, false, false);
     // simulation.fill_region("E", "sparse", false);
-    simulation.add_particle_concentration("Iex", "membrane", 0.10, false, true);
+    simulation.add_particle_concentration("Iex", "membrane", 0.5, false, true);
 
     // simulation.add_region(RegionType::Cube { name: "one".to_string(), p0: [0., 0., 0.], pf: [1., 1., 1.] }, 8.15E-14/6.);  // 
     // simulation.prepare_regions();
@@ -161,7 +154,7 @@ fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
 
     simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
 
-    let renderer = Render3D::new(&uniform_buffer, &texture, &simulation.lattice_params, &render_params, &state.config(), device);
+    let renderer = Render3D::new(&texture, &simulation.lattice_params, &render_params, &state.config(), device);
 
     let stats_container = make_all_stats(vec!["A", "B", "C"]);
     

@@ -1,6 +1,9 @@
 use wgpu::util::DeviceExt;
 use bytemuck::{Pod, Zeroable};
 use std::mem;
+use serde_json::Value;
+use std::fs::File;
+use std::io::{prelude::*};
 
 
 // ---------------------------------------------------------------------------
@@ -51,5 +54,23 @@ impl RenderParams {
             has_dynamic_offset: false,
             min_binding_size: wgpu::BufferSize::new(mem::size_of::<Params>() as _),
         }
+    }
+
+    pub fn from_file<P: AsRef<std::path::Path>>(
+        path: P,
+        device: &wgpu::Device,
+    ) -> Result<Self, String> {
+        let mut file = File::open(path).unwrap();
+        let mut buff = String::new();
+        file.read_to_string(&mut buff).unwrap();
+     
+        let data: Value = serde_json::from_str(&buff).unwrap();
+
+        let dimensions = vec![
+            data["rendering"]["height"].as_u64().unwrap() as usize,
+            data["rendering"]["width"].as_u64().unwrap() as usize,
+        ];
+        Ok(RenderParams::new(device, &dimensions))
+
     }
 }

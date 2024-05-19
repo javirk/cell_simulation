@@ -71,7 +71,6 @@ const INDICES: &[u16; 6] = &[
 impl Render3D {
 
     pub fn new(
-        uniform_buffer: &UniformBuffer,
         texture: &Texture,
         lattice_params: &LatticeParams,
         render_params: &RenderParams,

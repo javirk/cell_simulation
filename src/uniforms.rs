@@ -1,6 +1,7 @@
 use wgpu::util::DeviceExt;
 use bytemuck::{Pod, Zeroable};
 use std::mem;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -18,7 +19,18 @@ pub struct UniformBuffer {
 }
 
 impl UniformBuffer {
-    pub fn new(uniform: Uniform, device: &wgpu::Device,) -> Self {
+    pub fn new(device: &wgpu::Device,) -> Self {
+        let uniform = Uniform {
+            itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
+            frame_num: 0,
+            slice: 0,
+            slice_axis: 2,
+            rendering_view: 0,
+        };
+        UniformBuffer::new_from_uniform(uniform, device)
+    }
+
+    pub fn new_from_uniform(uniform: Uniform, device: &wgpu::Device) -> Self {
         let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("uniform buffer"),
             contents: bytemuck::bytes_of(&uniform),

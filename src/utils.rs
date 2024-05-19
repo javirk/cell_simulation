@@ -1,6 +1,8 @@
 use cgmath::num_traits::ToPrimitive;
 use rand::{Rng, rngs::ThreadRng};
 use serde::Deserialize;
+use serde_json::Value;
+use std::convert::TryFrom;
 
 use crate::lattice::Lattice;
 
@@ -96,4 +98,50 @@ where
     [array_t[0], array_t[1], array_t[2]]
     // println!("El valor: {:?}", value.as_array().unwrap());
     // [1., 1., 1.]
+}
+
+pub fn json_to_array<T>(json_value: &Value) -> Result<[T; 3], String>
+where
+    T: FromF64 + Copy + Default,
+{
+    if let Value::Array(arr) = json_value {
+        if arr.len() != 3 {
+            return Err("Array must have exactly 3 elements".to_string());
+        }
+
+        let mut result = [T::default(); 3];
+        for (i, value) in arr.iter().enumerate() {
+            if let Value::Number(num) = value {
+                let num_f64 = num.as_f64().ok_or_else(|| "Value cannot be converted to f64".to_string())?;
+                result[i] = T::from_f64(num_f64).ok_or_else(|| "Conversion error".to_string())?;
+            } else {
+                return Err("Non-number value found in array".to_string());
+            }
+        }
+        Ok(result)
+    } else {
+        Err("Input is not a JSON array".to_string())
+    }
+}
+
+pub trait FromF64 {
+    fn from_f64(n: f64) -> Option<Self>
+    where
+        Self: Sized;
+}
+
+impl FromF64 for f32 {
+    fn from_f64(n: f64) -> Option<Self> {
+        Some(n as f32)
+    }
+}
+
+impl FromF64 for u32 {
+    fn from_f64(n: f64) -> Option<Self> {
+        if n >= 0.0 && n <= u32::MAX as f64 && n.fract() == 0.0 {
+            Some(n as u32)
+        } else {
+            None
+        }
+    }
 }

@@ -72,14 +72,7 @@ fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer>
 
 
 fn setup_system(device: &wgpu::Device) -> CellSimulation {
-    let uniform = Uniform {
-        itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u32,
-        frame_num: 0,
-        slice: 0,
-        slice_axis: 2,
-        rendering_view: 0,
-    };
-    let uniform_buffer = UniformBuffer::new(uniform, device);
+    let uniform_buffer = UniformBuffer::new(device);
 
     let lattice_resolution = [32, 32, 64];
     let dimensions: [f32; 3] = [0.8, 0.8, 2.];
