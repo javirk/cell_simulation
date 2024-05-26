@@ -71,9 +71,9 @@ impl StatisticsGroup  {
 }
 
 #[derive(Debug)]
-struct StatisticContainer {
-    x: VecDeque<u32>,
-    y: VecDeque<f32>,  // Must be f32 for the UI
+pub struct StatisticContainer {
+    pub x: VecDeque<u32>,
+    pub y: VecDeque<f32>,  // Must be f32 for the UI
 }
 
 impl StatisticContainer {
@@ -82,7 +82,7 @@ impl StatisticContainer {
         StatisticContainer { x: VecDeque::with_capacity(capacity), y: VecDeque::with_capacity(capacity) }
     }
 
-    fn add(&mut self, x: u32, y: f32) {
+    pub fn add(&mut self, x: u32, y: f32) {
         while self.x.capacity() == self.x.len() {
             self.x.pop_front();
             self.y.pop_front();
@@ -92,7 +92,7 @@ impl StatisticContainer {
     }
 
     #[allow(dead_code)]
-    fn mean(&self) -> f32 {
+    pub fn mean(&self) -> f32 {
         let mut sum = 0.;
         for y in &self.y {
             sum += y;
@@ -100,7 +100,7 @@ impl StatisticContainer {
         sum / self.y.len() as f32
     }
 
-    fn last(&self) -> f32 {
+    pub fn last(&self) -> f32 {
         match self.y.back() {
             Some(y) => *y,
             None => 0.
@@ -108,7 +108,7 @@ impl StatisticContainer {
     }
 }
 
-fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer> {
+pub fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer> {
     let mut all_stats = HashMap::new();
     for metric in metrics_log {
         all_stats.insert(metric.to_string(), StatisticContainer::new(100));

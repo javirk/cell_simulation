@@ -207,7 +207,7 @@ impl Simulation {
         self.cme = Some(cme);
     }
 
-    pub fn from_file<P: AsRef<Path>>(path: P, device: &wgpu::Device) -> Result<(Self, Texture)> {
+    pub fn from_file<P: AsRef<Path>>(path: P, uniform_buffer: &UniformBuffer, device: &wgpu::Device) -> Result<(Self, Texture)> {
         let mut file = File::open(path).unwrap();
         let mut buff = String::new();
         file.read_to_string(&mut buff).unwrap();
@@ -225,6 +225,8 @@ impl Simulation {
         let lattice_resolution_usize = simulation.lattice_params.get_res_usize();
         let lattice_resolution: [u32; 3] = [lattice_resolution_usize[0] as u32, lattice_resolution_usize[1] as u32, lattice_resolution_usize[2] as u32];
         let texture = Texture::new(&lattice_resolution, wgpu::TextureFormat::R32Float, false, &device);
+        
+        simulation.prepare_for_gpu(&uniform_buffer, &texture, device);
 
         Ok((simulation, texture))
     }
@@ -270,6 +272,9 @@ impl Simulation {
                         total_length 
                     }, diffusion_rate);
                 },
+                "sparse" => {
+                    panic!("Sparse regions not implemented yet");
+                },
                 _ => panic!("Region type not implemented yet")
             }
         }
@@ -290,24 +295,34 @@ impl Simulation {
             } else if particle.get("concentration") != None {
                 let concentration = particle["concentration"].as_f64().unwrap() as f32;
                 self.add_particle_concentration(name, to_region, concentration, logging, is_reservoir);
-                
+
             } else {
                 panic!("Particle must have count or concentration");
             }
-            let diffusion_rate = particle["diffusion_rate"].as_object().unwrap();
-            for (region, value) in diffusion_rate.iter() {
-                let rate = value.as_f64().unwrap() as f32;
-                self.set_diffusion_rate_particle(name, region, rate);
+
+            // Sometimes diffusion rate is given. Other times it is not.
+            if particle.get("diffusion_rate") != None {
+                let diffusion_rate = particle["diffusion_rate"].as_object().unwrap();
+                for (region, value) in diffusion_rate.iter() {
+                    let rate = value.as_f64().unwrap() as f32;
+                    self.set_diffusion_rate_particle(name, region, rate);
+                }
             }
+
         }
     }
 
     fn json_reactions(&mut self, reactions: &Value) {
         // reactions are objects "reaction" : f32
+        if reactions.is_null() {
+            println!("No reactions found");
+            return;
+        }
         for (reaction_str, value) in reactions.as_object().unwrap() {
             let reaction = reaction_str.as_str();
             let mut line_vec = split_whitespace(reaction);
-            line_vec = line_vec[1..].to_vec();
+            // line_vec = line_vec[1..].to_vec();
+            debug!("Line vec: {:?}", line_vec);
     
             // Reference: reactants: Vec<&str>, products: Vec<&str>, k: f32
             let mut reactants: Vec<&str> = Vec::new();
@@ -795,7 +810,7 @@ impl Simulation {
             self.lattices[0].logging_particles.push(particle_idx);
         }
         info!("{} particles of type {} added to region {}", count, name, to_region);
-        debug!("Concentrations after adding particles: {}", self.lattices[0].concentrations);
+        debug!("Concentrations after adding particles: {:?}", self.lattices[0].concentrations.shape());
     }
 
     pub fn add_particle_concentration(&mut self, name: &str, to_region: &str, concentration: f32, logging: bool, is_reservoir: bool) {

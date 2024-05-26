@@ -10,7 +10,7 @@ use imgui::*;
 use simulation::{Simulation, Setup, UniformBuffer, RenderParams, Render3D};
 use imgui_wgpu::{Renderer, RendererConfig};
 
-use crate::statistics::StatisticContainer;
+use simulation::statistics::{StatisticContainer, make_all_stats};
 
 
 fn setup_imgui(window: &Window) -> (imgui::Context, imgui_winit_support::WinitPlatform) {
@@ -45,58 +45,19 @@ struct CellSimulation {
     all_stats: HashMap<String, StatisticContainer>
 }
 
-// #[derive(Debug)]
-// struct StatisticContainer {
-//     x: VecDeque<u32>,
-//     y: VecDeque<f32>,  // Must be f32 for the UI
-// }
-
-// impl StatisticContainer {
-
-//     fn new(capacity: usize) -> Self {
-//         StatisticContainer { x: VecDeque::with_capacity(capacity), y: VecDeque::with_capacity(capacity) }
-//     }
-
-//     fn add(&mut self, x: u32, y: f32) {
-//         while self.x.capacity() == self.x.len() {
-//             self.x.pop_front();
-//             self.y.pop_front();
-//         }
-//         self.x.push_back(x);
-//         self.y.push_back(y);
-//     }
-
-//     #[allow(dead_code)]
-//     fn mean(&self) -> f32 {
-//         let mut sum = 0.;
-//         for y in &self.y {
-//             sum += y;
-//         }
-//         sum / self.y.len() as f32
-//     }
-
-//     fn last(&self) -> f32 {
-//         match self.y.back() {
-//             Some(y) => *y,
-//             None => 0.
-//         }
-//     }
-// }
-
-// fn make_all_stats(metrics_log: Vec<&str>) -> HashMap<String, StatisticContainer> {
-//     let mut all_stats = HashMap::new();
-//     for metric in metrics_log {
-//         all_stats.insert(metric.to_string(), StatisticContainer::new(100));
-//     }
-//     all_stats
-// }
-
 
 fn setup_system(state: &Setup, device: &wgpu::Device) -> CellSimulation {
     let uniform_buffer = UniformBuffer::new(device);
 
+    // let render_param_data: Vec<usize> = vec![
+    //     720, // height
+    //     1280, // width
+    // ];
+
+    // let render_params = RenderParams::new(device, &render_param_data);
+
     let render_params = RenderParams::from_file("saved_models/easy.json", device).unwrap();
-    let (simulation, texture) = Simulation::from_file("saved_models/easy.json", device).unwrap();
+    let (simulation, texture) = Simulation::from_file("saved_models/easy.json", &uniform_buffer, device).unwrap();
 
     let renderer = Render3D::new(&texture, &simulation.lattice_params, &render_params, &state.config(), device);
 

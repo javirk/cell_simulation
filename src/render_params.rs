@@ -70,6 +70,7 @@ impl RenderParams {
             data["rendering"]["height"].as_u64().unwrap() as usize,
             data["rendering"]["width"].as_u64().unwrap() as usize,
         ];
+        println!("Dimensions: {:?}", dimensions);
         Ok(RenderParams::new(device, &dimensions))
 
     }

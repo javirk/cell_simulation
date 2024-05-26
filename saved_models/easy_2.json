@@ -20,9 +20,22 @@
       "external_radius": 0.4, 
       "total_length": 2.0,
       "base_diffusion_rate": 1.358E-14
+    },
+    {
+      "type": "sparse",
+      "name": "sparse",
+      
+      "base_diffusion_rate": 1.358E-14
     }
   ],
   "particles": [
+    {
+      "name": "obstacle",
+      "to_region": "interior",
+      "count": 5000,
+      "logging": true,
+      "is_reservoir": false
+    },
     {
       "name": "A",
       "to_region": "interior",

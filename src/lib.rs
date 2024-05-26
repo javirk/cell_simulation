@@ -8,6 +8,7 @@ pub use texture::Texture;
 pub use renderer_3d::Render3D;
 pub use renderer_2d::Render2D;
 pub use region::{Cube, Sphere, RegionType};
+// pub use statistics::StatisticContainer;
 
 // type Result<T> = std::result::Result<T, Error>;
 
@@ -28,9 +29,9 @@ mod uniforms;
 mod cme;
 mod reactions_params;
 mod setup;
-mod statistics;
 mod utils;
 mod renderer_3d;
 mod renderer_2d;
 mod region;
 mod macros;
+pub mod statistics;
